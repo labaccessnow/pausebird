@@ -54,7 +54,7 @@ def cmd_checks(cleared_csv: Path, register_csv: Path, b: Brain, read_images: boo
 
 
 def cmd_demo(b: Brain, lang: str) -> int:
-    data = json.loads((DEMO / "messages.json").read_text())
+    data = json.loads((DEMO / "messages.json").read_text(encoding="utf-8"))
     ages = data["rdap_fixture_days"]
     wrong = 0
     for m in data["messages"]:

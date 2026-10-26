@@ -71,13 +71,13 @@ class MetaBrain:
     # --- cost guard -----------------------------------------------------
     def _spent(self) -> float:
         try:
-            return json.loads(USAGE_FILE.read_text())["usd"]
+            return json.loads(USAGE_FILE.read_text(encoding="utf-8"))["usd"]
         except (OSError, ValueError, KeyError):
             return 0.0
 
     def _add(self, usd: float) -> None:
         USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        USAGE_FILE.write_text(json.dumps({"usd": round(self._spent() + usd, 6)}))
+        USAGE_FILE.write_text(json.dumps({"usd": round(self._spent() + usd, 6)}), encoding="utf-8")
 
     def _guard(self) -> None:
         if self._spent() >= self.budget:

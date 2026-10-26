@@ -128,11 +128,11 @@ def draw_check(c: dict, out: Path) -> None:
 
 def main() -> None:
     (HERE / "checks").mkdir(exist_ok=True)
-    with open(HERE / "register.csv", "w", newline="") as f:
+    with open(HERE / "register.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["number", "date", "payee", "amount"])
         w.writerows(REGISTER)
-    with open(HERE / "cleared.csv", "w", newline="") as f:
+    with open(HERE / "cleared.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["number", "date", "payee", "amount", "image"])
         for i, c in enumerate(CLEARED):

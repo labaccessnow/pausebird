@@ -95,7 +95,7 @@ def test_washed_and_counterfeit_and_micr():
 
 # --- end to end on the demo data -------------------------------------------
 def test_demo_messages_match_expectations():
-    data = json.loads((DEMO / "messages.json").read_text())
+    data = json.loads((DEMO / "messages.json").read_text(encoding="utf-8"))
     ages = data["rdap_fixture_days"]
     for m in data["messages"]:
         v = agent.check_message(Message(text=m["text"], sender=m["sender"]), rdap=lambda d: ages.get(d))

@@ -135,7 +135,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     demo = demo if demo is not None else env("FRAUDSHIELD_DEMO", "1") == "1"
     parent = parent or env("FRAUDSHIELD_PARENT", "Dad")
     lang = lang or env("FRAUDSHIELD_LANG", "en")
-    demo_data = json.loads((DEMO / "messages.json").read_text()) if demo else {}
+    demo_data = json.loads((DEMO / "messages.json").read_text(encoding="utf-8")) if demo else {}
 
     if rdap is None:
         ages = demo_data.get("rdap_fixture_days", {})
