@@ -1,0 +1,31 @@
+{
+  "_note": "Made-up messages modeled on common real scams. All links and numbers are fictional; the app never opens them.",
+  "rdap_fixture_days": {
+    "usps-redelivery-help.top": 3,
+    "ezpass-tolls-pay.vip": 5,
+    "verify-acct.xyz": 2,
+    "cj-delivery-kr.top": 9
+  },
+  "messages": [
+    {"id": "usps", "channel": "sms", "sender": "+1 (202) 555-0147", "expect": "SCAM",
+     "text": "USPS: Your package is on hold due to an incomplete address. Update within 24 hours: https://usps-redelivery-help.top/track"},
+    {"id": "toll", "channel": "sms", "sender": "+1 (202) 555-0188", "expect": "SCAM",
+     "text": "E-ZPass: You have an unpaid toll balance of $6.99. Pay now to avoid a $50 late fee: https://ezpass-tolls-pay.vip/pay"},
+    {"id": "bank", "channel": "sms", "sender": "+1 (202) 555-0123", "expect": "SCAM",
+     "text": "Chase Alert: Your account has been suspended due to unusual activity. Verify your identity: http://chase-secure-login.com.verify-acct.xyz/login"},
+    {"id": "grandkid", "channel": "sms", "sender": "+1 (202) 555-0199", "expect": "SCAM",
+     "text": "Hi Grandpa it's me, I lost my phone, this is my new number. I'm in trouble and need $900 in Apple gift cards today. Please don't tell mom."},
+    {"id": "ko-family", "channel": "kakaotalk", "sender": "+82 10-0000-0101", "expect": "SCAM",
+     "text": "엄마 나야 폰 액정이 깨져서 수리 맡겼어. 이 번호로 문자해줘. 급하게 문화상품권 좀 사줄 수 있어?"},
+    {"id": "ko-prosecutor", "channel": "voicemail", "sender": "+82 70-0000-1234", "expect": "SCAM",
+     "text": "안녕하세요 서울중앙지검 수사관입니다. 고객님 명의 계좌가 범죄 사건에 연루되어 확인이 필요합니다. 안전계좌로 이체하시고 아무에게도 말하지 마세요."},
+    {"id": "ko-delivery", "channel": "sms", "sender": "+82 10-0000-0177", "expect": "SCAM",
+     "text": "[CJ대한통운] 주소지 불일치로 배송이 보류되었습니다. 주소 확인: cj-delivery-kr.top/a1"},
+    {"id": "family-dinner", "channel": "sms", "sender": "James", "expect": "SAFE",
+     "text": "Hi Dad, dinner at 6 on Sunday? I'll bring the kids."},
+    {"id": "dentist", "channel": "sms", "sender": "Maple Dental", "expect": "SAFE",
+     "text": "Your appointment at Maple Dental is tomorrow at 10:00 AM. Reply C to confirm."},
+    {"id": "ko-family-ok", "channel": "kakaotalk", "sender": "딸", "expect": "SAFE",
+     "text": "아빠 일요일에 애들 데리고 갈게요. 저녁 같이 먹어요."}
+  ]
+}

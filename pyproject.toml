@@ -1,0 +1,33 @@
+[project]
+name = "family-fraud-shield"
+version = "0.1.0"
+description = "Catches scam messages and fake checks before an older parent loses money — and tells the family."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2",
+    "phonenumbers",
+    "httpx",
+    "openai>=1.40",
+    "pillow",
+    "fastapi",
+    "uvicorn[standard]",
+    "python-multipart",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[project.scripts]
+fraudshield = "fraudshield.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["fraudshield*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
