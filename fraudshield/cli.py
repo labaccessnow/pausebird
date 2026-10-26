@@ -86,10 +86,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("demo")
     sv = sub.add_parser("serve"); sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8000)
+    sv.add_argument("--log", type=Path, help="append server output to this file (pythonw on Windows has no console)")
     a = ap.parse_args(argv)
     if a.cmd == "serve":
         import uvicorn
         from .web import create_app
+        if a.log:
+            a.log.parent.mkdir(parents=True, exist_ok=True)
+            sys.stdout = sys.stderr = open(a.log, "a", encoding="utf-8", buffering=1)
         uvicorn.run(create_app(brain=pick_brain(a.offline), offline=a.offline), host=a.host, port=a.port)
         return 0
     b = pick_brain(a.offline)

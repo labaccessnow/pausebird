@@ -27,3 +27,7 @@ for name, size, scale in [("icon-512.png", 512, 0.78), ("icon-192.png", 192, 0.7
                           ("icon-maskable-512.png", 512, 0.58)]:  # maskable keeps the shield in the safe zone
     shield(scale).resize((size, size), Image.LANCZOS).save(OUT / name, optimize=True)
     print(OUT / name)
+
+# Windows shortcut / favicon icon, several sizes in one file
+shield(0.78).resize((256, 256), Image.LANCZOS).save(OUT / "icon.ico", sizes=[(16, 16), (32, 32), (48, 48), (256, 256)])
+print(OUT / "icon.ico")
