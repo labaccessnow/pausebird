@@ -8,9 +8,16 @@
 """
 from __future__ import annotations
 
+import logging
 from typing import Optional, Protocol
 
 from ..models import CheckItem, Message, Signal
+
+log = logging.getLogger("fraudshield.llm")
+
+
+class BudgetExceeded(RuntimeError):
+    """Our own spending cap was reached (Meta's 'spend limit' only sends an email)."""
 
 
 class Brain(Protocol):
@@ -38,3 +45,38 @@ class OfflineBrain:
 
     def explain(self, text, signals, lang):
         return None
+
+
+class FallbackBrain:
+    """Wraps a brain so a model outage or the budget stop never blocks a verdict.
+
+    judge/explain are extras on top of the rules: if they fail, the rules still answer.
+    The eyes and ears (screenshot, voicemail, check image) pass errors through, because
+    without them there is nothing to judge and the caller should say so.
+    """
+
+    def __init__(self, inner: Brain):
+        self.inner = inner
+
+    def read_screenshot(self, image, mime):
+        return self.inner.read_screenshot(image, mime)
+
+    def transcribe(self, audio, mime, lang_hint="ko"):
+        return self.inner.transcribe(audio, mime, lang_hint)
+
+    def read_check(self, image, mime):
+        return self.inner.read_check(image, mime)
+
+    def judge(self, text, signals):
+        try:
+            return self.inner.judge(text, signals)
+        except Exception as e:  # noqa: BLE001 - any model failure falls back to rules only
+            log.warning("judge failed, rules only: %s", e)
+            return None
+
+    def explain(self, text, signals, lang):
+        try:
+            return self.inner.explain(text, signals, lang)
+        except Exception as e:  # noqa: BLE001
+            log.warning("explain failed, using the template: %s", e)
+            return None

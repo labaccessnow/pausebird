@@ -51,6 +51,19 @@ past the checks.
 Privacy: standard Meta Model API tier only — `-contributor` models (which train on inputs) are refused in
 code. Meta's billing "spend limit" is an email alert, not a cap, so the client keeps its own budget.
 
+## The phone page
+
+One page, big buttons, English and 한국어. Paste a message, pick a screenshot or a voicemail, and get a
+red, yellow or green answer with fixed next steps. If it's a scam there are two more buttons:
+**Tell my family** (a push alert) and **I already clicked, called, or paid** (the urgent steps).
+The second tab compares the checks the bank paid with the checkbook.
+
+On Android, install the page (browser menu → *Add to Home screen*) and it appears in the **Share**
+sheet: share a text or a screenshot straight from Messages or KakaoTalk.
+
+Safety details: scam links are shown as `hxxps://bad[.]top` so they can't be tapped, phone numbers are
+not turned into links, nothing is saved, and the service worker caches nothing.
+
 ## Run it
 
 ```bash
@@ -59,11 +72,28 @@ python demo/make_demo_data.py          # fake checkbook + check images
 python -m fraudshield.cli --offline demo   # rules only, no API key needed
 pytest -q
 
+python -m fraudshield.cli --offline serve --port 8000   # the phone page at http://127.0.0.1:8000
+
 export MODEL_API_KEY=...               # Meta Model API key
 python -m fraudshield.cli demo         # adds check-image reading, second opinions, plain-language replies
 python -m fraudshield.cli screenshot shot.png
 python -m fraudshield.cli voicemail vm.m4a --lang ko
+python -m fraudshield.cli serve        # page with screenshots and voicemails turned on
 ```
+
+Settings (environment variables):
+
+| Variable | What it does | Default |
+|---|---|---|
+| `MODEL_API_KEY` | Meta Model API key; without it the page runs on rules only | — |
+| `FRAUDSHIELD_BUDGET_USD` | stop calling the model after this much spend | `140` |
+| `NTFY_SERVER`, `NTFY_TOPIC`, `NTFY_TOKEN` | where "Tell my family" sends the push alert | console only |
+| `FRAUDSHIELD_PARENT` | the name used in family alerts | `Dad` |
+| `FRAUDSHIELD_LANG` | page language when the phone isn't set to Korean | `en` |
+| `FRAUDSHIELD_DEMO` | show the example messages and demo checkbook | `1` |
+| `FRAUDSHIELD_OFFLINE` | no model and no registry lookups | `0` |
+
+Installing the page and the Share button need HTTPS, except on `localhost`.
 
 ## Demo data
 

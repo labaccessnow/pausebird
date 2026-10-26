@@ -5,31 +5,25 @@
     fraudshield voicemail vm.m4a             (needs MODEL_API_KEY)
     fraudshield checks cleared.csv register.csv [--read-images]
     fraudshield demo
+    fraudshield serve [--host 127.0.0.1] [--port 8000]   (the phone web page)
 """
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import mimetypes
-import os
 import sys
 from pathlib import Path
 
 from . import agent
+from .ledger import read_checks
+from .llm import pick_brain
 from .llm.base import Brain, OfflineBrain
-from .models import CheckItem, Level, Message, Verdict
+from .models import Level, Message, Verdict
 
 COLOR = {Level.SCAM: "\033[1;31m", Level.CAUTION: "\033[1;33m", Level.SAFE: "\033[1;32m"}
 RESET = "\033[0m"
 DEMO = Path(__file__).resolve().parent.parent / "demo"
-
-
-def brain(offline: bool) -> Brain:
-    if offline or not os.environ.get("MODEL_API_KEY"):
-        return OfflineBrain()
-    from .llm.meta import MetaBrain
-    return MetaBrain()
 
 
 def show(v: Verdict, lang: str) -> None:
@@ -43,23 +37,10 @@ def show(v: Verdict, lang: str) -> None:
         print(f"  {i}. {step}")
 
 
-def read_checks(path: Path) -> list[CheckItem]:
-    with open(path, newline="") as f:
-        return [CheckItem(number=int(r["number"]), amount=float(r["amount"]), payee=r["payee"],
-                          date=r.get("date") or None,
-                          image=str(path.parent / r["image"]) if r.get("image") else None)
-                for r in csv.DictReader(f)]
-
-
 def cmd_checks(cleared_csv: Path, register_csv: Path, b: Brain, read_images: bool, lang: str) -> Verdict:
     cleared, register = read_checks(cleared_csv), read_checks(register_csv)
     if read_images:
-        for i, c in enumerate(cleared):
-            if c.image:
-                mime = mimetypes.guess_type(c.image)[0] or "image/png"
-                seen = b.read_check(Path(c.image).read_bytes(), mime)
-                if seen:  # trust the bank's number/amount/payee; add what the eyes saw
-                    cleared[i] = c.model_copy(update={"micr_number": seen.micr_number, "notes": seen.notes})
+        cleared = agent.read_check_images(cleared, b)
     v, findings = agent.check_account(cleared, register)
     for f in findings:
         c = f.check
@@ -103,8 +84,15 @@ def main(argv: list[str] | None = None) -> int:
     c = sub.add_parser("checks"); c.add_argument("cleared", type=Path); c.add_argument("register", type=Path)
     c.add_argument("--read-images", action="store_true")
     sub.add_parser("demo")
+    sv = sub.add_parser("serve"); sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8000)
     a = ap.parse_args(argv)
-    b = brain(a.offline)
+    if a.cmd == "serve":
+        import uvicorn
+        from .web import create_app
+        uvicorn.run(create_app(brain=pick_brain(a.offline), offline=a.offline), host=a.host, port=a.port)
+        return 0
+    b = pick_brain(a.offline)
 
     if a.cmd == "message":
         show(agent.check_message(Message(text=a.text, sender=a.sender), brain=b, online=a.online), a.lang)

@@ -21,6 +21,7 @@ import httpx
 from openai import OpenAI
 
 from ..models import CheckItem, Message, Signal
+from .base import BudgetExceeded
 
 BASE_URL = "https://api.meta.ai/v1"
 CHAT_MODEL = os.environ.get("FRAUDSHIELD_MODEL", "muse-spark-1.3")
@@ -28,10 +29,6 @@ ASR_MODEL = "muse-voice-transcribe-1.0"
 # USD per 1M tokens (input, output) and per audio hour — dev.meta.ai/docs/pricing-rate-limits
 PRICE_IN, PRICE_OUT, PRICE_AUDIO_HR = 1.25, 4.25, 0.18
 USAGE_FILE = Path(os.environ.get("FRAUDSHIELD_USAGE", Path.home() / ".fraudshield" / "usage.json"))
-
-
-class BudgetExceeded(RuntimeError):
-    pass
 
 
 def _schema(name: str, props: dict) -> dict:

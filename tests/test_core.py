@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fraudshield import agent, extract
 from fraudshield.checks import accounts, links, patterns, phones
-from fraudshield.cli import read_checks
+from fraudshield.ledger import parse_checks, read_checks
 from fraudshield.models import CheckItem, Level, Message
 
 DEMO = Path(__file__).resolve().parent.parent / "demo"
@@ -107,3 +107,17 @@ def test_demo_account():
     assert v.level == Level.SCAM
     assert sum(f.level == Level.SCAM for f in findings) == 3
     assert sum(f.level == Level.SAFE for f in findings) == 4
+
+
+# --- ledger ----------------------------------------------------------------
+def test_bank_csv_with_loose_headers():
+    rows = parse_checks("Check #,Posting Date,Pay To,Amount\n#1043,10/14/2026,Quick Cash,\"-$1,100.00\"\n")
+    assert rows[0].number == 1043 and rows[0].amount == 1100.0 and rows[0].date == date(2026, 10, 14)
+
+
+def test_bad_csv_says_what_is_wrong():
+    import pytest
+    with pytest.raises(ValueError, match="missing column"):
+        parse_checks("number,payee\n1,x\n")
+    with pytest.raises(ValueError, match="row 2"):
+        parse_checks("number,amount,payee\nabc,5,x\n")

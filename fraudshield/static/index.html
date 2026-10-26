@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Never turn a scammer's phone number or address into something a parent can tap. -->
+<meta name="format-detection" content="telephone=no, email=no, address=no, date=no">
+<meta name="theme-color" content="#1d4ed8">
+<meta name="description" content="Check a message or your paid checks for scams, in English or Korean.">
+<title>Family Fraud Shield</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <img src="/static/icon-192.png" alt="" width="40" height="40">
+    <div>
+      <h1 data-i18n="title">Family Fraud Shield</h1>
+      <p data-i18n="tagline">Not sure about a message? Check it here before you reply.</p>
+    </div>
+  </div>
+  <button id="lang" class="lang" type="button" aria-label="Change language">한국어</button>
+</header>
+
+<main>
+  <nav class="tabs" role="tablist">
+    <button role="tab" id="tab-msg" aria-selected="true" aria-controls="panel-msg" data-i18n="tab_msg">Check a message</button>
+    <button role="tab" id="tab-acct" aria-selected="false" aria-controls="panel-acct" data-i18n="tab_acct">Check my checks</button>
+  </nav>
+
+  <section id="panel-msg" role="tabpanel" aria-labelledby="tab-msg">
+    <form id="msg-form" class="card">
+      <label for="msg-text" data-i18n="paste_label">Paste the message</label>
+      <textarea id="msg-text" rows="5" maxlength="5000" data-i18n-ph="paste_ph"
+        placeholder="Paste the text, email or KakaoTalk message here"></textarea>
+      <label for="msg-sender" data-i18n="sender_label">Who sent it? (optional)</label>
+      <input id="msg-sender" type="text" maxlength="200" autocomplete="off" data-i18n-ph="sender_ph"
+        placeholder="Phone number, email or name">
+      <button class="primary" type="submit" data-i18n="check_btn">Check it</button>
+    </form>
+
+    <div class="or" data-i18n="or">or</div>
+
+    <div class="row">
+      <button class="big" type="button" id="shot-btn" data-i18n="shot_btn">📷 Screenshot</button>
+      <button class="big" type="button" id="vm-btn" data-i18n="vm_btn">🎙️ Voicemail</button>
+    </div>
+    <input id="shot-file" type="file" accept="image/*" hidden>
+    <input id="vm-file" type="file" accept="audio/*,video/mp4,.m4a" hidden>
+    <p class="note" id="model-note" hidden data-i18n="needs_model_note">Screenshots and voicemails need the AI model, which isn't turned on yet.</p>
+
+    <div id="examples" class="examples" hidden>
+      <h2 data-i18n="examples">Try an example</h2>
+      <div id="example-list" class="chips"></div>
+    </div>
+  </section>
+
+  <section id="panel-acct" role="tabpanel" aria-labelledby="tab-acct" hidden>
+    <form id="acct-form" class="card">
+      <p data-i18n="acct_intro">Compare the checks your bank paid with the checks you actually wrote. Fake checks made with your account number show up here.</p>
+      <button class="primary" type="button" id="demo-acct" hidden data-i18n="demo_btn">Try the demo checkbook</button>
+      <label for="paid-file" data-i18n="paid_label">Checks the bank paid (CSV from your bank)</label>
+      <input id="paid-file" type="file" accept=".csv,text/csv">
+      <label for="wrote-file" data-i18n="wrote_label">Checks you wrote (your checkbook, CSV)</label>
+      <input id="wrote-file" type="file" accept=".csv,text/csv">
+      <label class="check" id="read-images-row" hidden><input id="read-images" type="checkbox">
+        <span data-i18n="read_images">Also read the check pictures with AI</span></label>
+      <button class="primary" type="submit" data-i18n="compare_btn">Compare</button>
+    </form>
+  </section>
+
+  <div id="busy" class="busy" hidden><span class="spinner"></span><span data-i18n="checking">Checking…</span></div>
+  <div id="error" class="error" role="alert" hidden></div>
+  <article id="result" class="result" aria-live="polite" hidden></article>
+</main>
+
+<footer>
+  <p data-i18n="footer_private">Nothing you check is saved. Links in messages are never opened.</p>
+  <p id="model-state"></p>
+</footer>
+<script src="/static/app.js"></script>
+</body>
+</html>

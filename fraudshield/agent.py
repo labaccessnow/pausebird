@@ -6,6 +6,8 @@ hard rule hit — that's what keeps the verdict verifiable.
 """
 from __future__ import annotations
 
+import mimetypes
+from pathlib import Path
 from typing import Callable, Optional
 
 from . import extract, playbooks
@@ -91,6 +93,19 @@ def check_message(msg: Message, brain: Optional[Brain] = None, online: bool = Fa
                    summary_en=plain_en or en, summary_ko=plain_ko or ko,
                    next_steps=playbooks.steps("message") if level != Level.SAFE else [],
                    model_opinion=opinion[1] if opinion else None)
+
+
+def read_check_images(cleared: list[CheckItem], brain: Brain) -> list[CheckItem]:
+    """Let the model look at each paid check. The bank's number, amount and payee stay as the
+    bank reported them; the eyes add the MICR number and any signs of tampering."""
+    out = []
+    for c in cleared:
+        seen = None
+        if c.image:
+            mime = mimetypes.guess_type(c.image)[0] or "image/png"
+            seen = brain.read_check(Path(c.image).read_bytes(), mime)
+        out.append(c.model_copy(update={"micr_number": seen.micr_number, "notes": seen.notes}) if seen else c)
+    return out
 
 
 def check_account(cleared: list[CheckItem], register: list[CheckItem]) -> tuple[Verdict, list[CheckFinding]]:
