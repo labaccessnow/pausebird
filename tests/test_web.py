@@ -178,3 +178,46 @@ def test_passcode_guessing_is_slowed_down():
     assert codes[:10] == [403] * 10 and codes[10] == 429
     assert c.post("/api/login", json={"code": "20261104"}).status_code == 429
 
+
+
+def ntfy(statuses, **kw):
+    """An NtfyNotifier talking to a fake server that answers with `statuses` in turn."""
+    import httpx
+    from fraudshield.alerts import NtfyNotifier
+    seen, codes = [], iter(statuses)
+
+    def answer(req):
+        seen.append(req)
+        return httpx.Response(next(codes))
+    client = httpx.Client(transport=httpx.MockTransport(answer))
+    return NtfyNotifier(server="https://ntfy.example/", topic="family-shield", token="tk",
+                        client=client, retry_wait=0, **kw), seen
+
+
+def test_ntfy_sends_json_so_korean_titles_survive():
+    import json
+    n, seen = ntfy([200], call=("Call Dad", "+12025550100"))
+    assert n.send("아버지 got a likely scam", "Please call", urgent=True)
+    req = seen[0]
+    msg = json.loads(req.content)
+    assert str(req.url) == "https://ntfy.example" and req.headers["authorization"] == "Bearer tk"
+    assert msg["topic"] == "family-shield" and msg["title"] == "아버지 got a likely scam" and msg["priority"] == 5
+    assert msg["actions"][0]["url"] == "tel:+12025550100"
+
+
+def test_ntfy_retries_a_web_shield_403_but_not_a_bad_topic():
+    n, seen = ntfy([403, 200])
+    assert n.send("t", "b", urgent=False) and len(seen) == 2
+    n, seen = ntfy([400, 200])
+    assert not n.send("t", "b", urgent=False) and len(seen) == 1
+    n, seen = ntfy([503, 503, 503])
+    assert not n.send("t", "b", urgent=False) and len(seen) == 3
+
+
+def test_failed_push_is_reported_to_the_page():
+    rec = Recorder()
+    rec.send = lambda *a, **kw: False
+    c = TestClient(create_app(brain=OfflineBrain(), notifier=rec, offline=True))
+    r = c.post("/api/check/message", json={"text": "Chase Alert: account suspended. Verify: "
+               "http://chase-secure-login.com.verify-acct.xyz/login"}).json()
+    assert c.post("/api/alert", json={"id": r["id"]}).json()["sent"] is False

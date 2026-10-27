@@ -88,6 +88,7 @@ Settings (environment variables):
 | `MODEL_API_KEY` | Meta Model API key; without it the page runs on rules only | — |
 | `FRAUDSHIELD_BUDGET_USD` | stop calling the model after this much spend | `140` |
 | `NTFY_SERVER`, `NTFY_TOPIC`, `NTFY_TOKEN` | where "Tell my family" sends the push alert | console only |
+| `FRAUDSHIELD_PARENT_PHONE` | adds a one-tap "Call Dad" button to the push alert | no button |
 | `FRAUDSHIELD_PARENT` | what alerts and English answers call the parent | `Dad` |
 | `FRAUDSHIELD_PARENT_KO` | what Korean answers call the parent | `아버지` |
 | `FRAUDSHIELD_LANG` | page language when the phone isn't set to Korean | `en` |

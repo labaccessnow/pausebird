@@ -145,9 +145,10 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     raw_brain = brain or pick_brain(offline)
     model_on = not isinstance(raw_brain, OfflineBrain)
     brain = FallbackBrain(raw_brain)
-    notifier = notifier or (alerts.NtfyNotifier() if env("NTFY_TOPIC") else alerts.ConsoleNotifier())
     demo = demo if demo is not None else env("FRAUDSHIELD_DEMO", "1") == "1"
     parent = parent or env("FRAUDSHIELD_PARENT", "Dad")
+    notifier = notifier or (alerts.NtfyNotifier(call=(f"Call {parent}", env("FRAUDSHIELD_PARENT_PHONE", "")))
+                            if env("NTFY_TOPIC") else alerts.ConsoleNotifier())
     lang = lang or env("FRAUDSHIELD_LANG", "en")
     passcode = passcode if passcode is not None else env("FRAUDSHIELD_PASSCODE") or None
     demo_data = json.loads((DEMO / "messages.json").read_text(encoding="utf-8")) if demo else {}

@@ -128,6 +128,7 @@ ol.steps li { margin-bottom: 8px; }
   border: 2px solid var(--scam); }
 .urgent h3 { margin-top: 0; color: var(--scam); }
 .sent { margin: 8px 0 0; font-weight: 700; color: var(--safe); }
+.sent.failed { color: var(--scam); }
 
 details { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
 summary { font-weight: 700; cursor: pointer; min-height: 40px; }

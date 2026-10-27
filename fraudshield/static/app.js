@@ -27,6 +27,7 @@ const T = {
     what_now: "What to do now",
     tell_family: "📣 Tell my family", told_phone: "✓ Your family got an alert.",
     told_console: "✓ Alert written. (Phone alerts aren't set up yet.)",
+    told_fail: "The alert did not go through. Please call your family.",
     clicked_btn: "I already clicked, called, or paid", clicked_title: "Do these now",
     why: "Why we think so", read_title: "What we read", from: "From",
     score: "Risk score", ai: "AI second opinion",
@@ -77,6 +78,7 @@ const T = {
     what_now: "지금 할 일",
     tell_family: "📣 가족에게 알리기", told_phone: "✓ 가족에게 알림을 보냈습니다.",
     told_console: "✓ 알림을 작성했습니다. (휴대폰 알림은 아직 설정되지 않았습니다.)",
+    told_fail: "알림이 전달되지 않았습니다. 가족에게 직접 전화하세요.",
     clicked_btn: "이미 눌렀거나, 전화했거나, 돈을 보냈어요", clicked_title: "지금 바로 하세요",
     why: "이렇게 판단한 이유", read_title: "읽은 내용", from: "보낸 사람",
     score: "위험 점수", ai: "AI 의견",
@@ -261,9 +263,10 @@ function render(r) {
 function actions(r) {
   const wrap = el("div", { class: "actions" });
   const tell = el("button", { type: "button", class: "tell", onclick: () => tellFamily(r, tell) }, t("tell_family"));
-  if (toldText) tell.disabled = true;
+  const failed = toldText === "told_fail";
+  if (toldText && !failed) tell.disabled = true;
   wrap.append(tell);
-  if (toldText) wrap.append(el("p", { class: "sent" }, t(toldText)));
+  if (toldText) wrap.append(el("p", { class: failed ? "sent failed" : "sent" }, t(toldText)));
   if (r.kind === "message") {
     const panel = el("div", { class: "urgent" }, el("h3", {}, t("clicked_title")),
       el("ol", { class: "steps" }, (r.clicked_steps[lang] || r.clicked_steps.en).map((s) => el("li", {}, s))));
@@ -292,7 +295,7 @@ async function tellFamily(r, btn) {
   try {
     const res = await call("/api/alert", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: r.id }) }, true);
-    toldText = res.via === "phone" ? "told_phone" : "told_console";
+    toldText = !res.sent ? "told_fail" : res.via === "phone" ? "told_phone" : "told_console";
     render(current);
   } catch (e) {
     showError(e.message);
