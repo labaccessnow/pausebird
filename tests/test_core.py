@@ -65,6 +65,8 @@ def test_punycode_and_raw_ip():
 def test_korean_patterns():
     c = codes(patterns.scan("안녕하세요 수사관입니다. 안전계좌로 이체하시고 아무에게도 말하지 마세요."))
     assert {"msg.government", "msg.safe_account", "msg.secrecy"} <= c
+    # a voicemail transcript can hear 안전 as 안정
+    assert "msg.safe_account" in codes(patterns.scan("안정 계좌로 이체하시고 아무에게도 말하지 마세요"))
 
 
 def test_korean_070_voip():

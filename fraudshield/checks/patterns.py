@@ -47,7 +47,8 @@ PATTERNS: list[Pattern] = [
        "It asks for payment by gift card, crypto, wire or a payment app. Those can't be taken back.",
        "상품권, 코인, 송금 앱으로 돈을 보내라고 합니다. 이런 돈은 되돌릴 수 없습니다."),
     _p("msg.safe_account", 35,
-       r"\bsafe (bank )?account\b|\bmove your money\b.{0,30}\b(protect|safe)|안전 ?계좌|보호 ?계좌",
+       # 안정: speech-to-text often hears a phone-quality 안전 as 안정
+       r"\bsafe (bank )?account\b|\bmove your money\b.{0,30}\b(protect|safe)|안[전정] ?계좌|보호 ?계좌",
        "It asks you to move money to a 'safe account'. No real bank or police ever asks this.",
        "'안전계좌'로 돈을 옮기라고 합니다. 진짜 은행이나 경찰은 절대 이런 요구를 하지 않습니다."),
     _p("msg.delivery", 15,

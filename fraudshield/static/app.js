@@ -232,10 +232,11 @@ function render(r) {
   body.append(el("p", { class: "summary" }, r.summary[lang] || r.summary.en));
 
   if (r.read) {
-    body.append(el("h3", {}, t("read_title")),
+    // DOM append() would print a null as the word "null" (a voicemail has no picture or sender)
+    body.append(...[el("h3", {}, t("read_title")),
       r.preview ? el("img", { class: "read-shot", src: r.preview, alt: "" }) : null,
       r.read.sender ? el("p", { class: "meta" }, t("from") + ": " + r.read.sender) : null,
-      el("p", { class: "read" }, r.read.text));
+      el("p", { class: "read" }, r.read.text)].filter(Boolean));
   }
   if (r.kind === "account") body.append(checkList(r.findings));
 
