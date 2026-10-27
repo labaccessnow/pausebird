@@ -62,6 +62,16 @@ def test_page_and_status():
                                            "alerts": "console"}
 
 
+def test_example_screenshots_are_served_and_checked():
+    c, _ = client(FakeEyes())
+    shots = c.get("/api/demo/screenshots").json()
+    assert [x["id"] for x in shots] == ["shot-ko-delivery", "shot-en-toll"] and shots[0]["label"]["ko"]
+    img = c.get(shots[0]["url"])
+    assert img.status_code == 200 and img.headers["content-type"] == "image/png"
+    r = c.post("/api/check/screenshot", files={"file": ("x.png", img.content, "image/png")}).json()
+    assert r["level"] == "SCAM"
+
+
 def test_scam_message_then_family_alert():
     c, rec = client()
     r = c.post("/api/check/message", json={"text": "Chase Alert: Your account has been suspended due to "

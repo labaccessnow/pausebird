@@ -11,6 +11,10 @@ const T = {
     paste_ph: "Paste the text, email or KakaoTalk message here",
     sender_label: "Who sent it? (optional)", sender_ph: "Phone number, email or name",
     check_btn: "Check it", checking: "Checking…", or: "or",
+    stage_shot: "Reading the screenshot…", stage_vm: "Listening to the voicemail…",
+    stage_rules: "Checking links and phone numbers…", stage_ai: "Asking the AI for a second opinion…",
+    stage_write: "Writing the answer…", stage_checks: "Reading the check pictures…",
+    stage_compare: "Comparing your checks…",
     shot_btn: "📷 Screenshot", vm_btn: "🎙️ Voicemail",
     needs_model_note: "Screenshots and voicemails need the AI model, which isn't turned on yet.",
     examples: "Try an example",
@@ -57,6 +61,10 @@ const T = {
     paste_ph: "문자, 이메일, 카카오톡 메시지를 여기에 붙여 넣으세요",
     sender_label: "보낸 사람 (선택)", sender_ph: "전화번호, 이메일 또는 이름",
     check_btn: "확인하기", checking: "확인 중…", or: "또는",
+    stage_shot: "화면 캡처를 읽는 중…", stage_vm: "음성 메시지를 듣는 중…",
+    stage_rules: "링크와 전화번호를 확인하는 중…", stage_ai: "AI에게 한 번 더 물어보는 중…",
+    stage_write: "답변을 쓰는 중…", stage_checks: "수표 사진을 읽는 중…",
+    stage_compare: "수표를 비교하는 중…",
     shot_btn: "📷 화면 캡처", vm_btn: "🎙️ 음성 메시지",
     needs_model_note: "화면 캡처와 음성 메시지는 AI 모델이 필요합니다. 아직 켜져 있지 않습니다.",
     examples: "예시로 해 보기",
@@ -108,6 +116,8 @@ const store = {
 let status = { model: false, demo: false, lang: "en" };
 let lang = store.get("lang") || ((navigator.language || "").toLowerCase().startsWith("ko") ? "ko" : "en");
 let current = null; // the result on screen, re-drawn when the language changes
+let examples = { messages: [], shots: [] };
+let stageTimer = null;
 let clickedOpen = false;
 let toldText = "";
 
@@ -133,13 +143,26 @@ function applyLang() {
   document.querySelectorAll("[data-i18n-ph]").forEach((n) => { n.placeholder = t(n.dataset.i18nPh); });
   $("#lang").textContent = lang === "ko" ? "English" : "한국어";
   $("#model-state").textContent = status.model ? t("model_on") : t("model_off");
+  renderExamples();
   if (current) render(current);
 }
 
 // ---- talking to the server -------------------------------------------------
-async function call(path, opts, keepResult) {
+// The AI takes a few seconds, so the busy line walks through what is happening.
+// The steps are timed on this side; the server doesn't report progress.
+function showStages(keys) {
+  const line = $("#busy-text");
+  let i = 0;
+  line.textContent = t(keys[0] || "checking");
+  clearInterval(stageTimer);
+  stageTimer = setInterval(() => { if (i < keys.length - 1) line.textContent = t(keys[++i]); }, 2200);
+}
+const aiStages = () => (status.model ? ["stage_ai", "stage_write"] : []);
+
+async function call(path, opts, keepResult, stages) {
   hideError();
   if (!keepResult) $("#result").hidden = true;
+  showStages(stages || []);
   $("#busy").hidden = false;
   document.querySelectorAll("button").forEach((b) => { b.disabled = true; });
   try {
@@ -153,6 +176,7 @@ async function call(path, opts, keepResult) {
     if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : "other");
     return body;
   } finally {
+    clearInterval(stageTimer);
     $("#busy").hidden = true;
     document.querySelectorAll("button").forEach((b) => { b.disabled = false; });
   }
@@ -168,15 +192,23 @@ function showError(code) {
 }
 function hideError() { $("#error").hidden = true; }
 
-async function run(path, opts) {
+function forget() {
+  if (current && current.preview) URL.revokeObjectURL(current.preview);
+  current = null;
+}
+
+async function run(path, opts, stages, preview) {
   try {
-    const r = await call(path, opts);
+    const r = await call(path, opts, false, stages);
     clickedOpen = false;
     toldText = "";
+    forget();
+    r.preview = preview || null;  // stays on this phone; never sent back
     current = r;
     render(r);
     $("#result").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (e) {
+    if (preview) URL.revokeObjectURL(preview);
     showError(e.message);
   }
 }
@@ -198,6 +230,7 @@ function render(r) {
 
   if (r.read) {
     body.append(el("h3", {}, t("read_title")),
+      r.preview ? el("img", { class: "read-shot", src: r.preview, alt: "" }) : null,
       r.read.sender ? el("p", { class: "meta" }, t("from") + ": " + r.read.sender) : null,
       el("p", { class: "read" }, r.read.text));
   }
@@ -276,15 +309,22 @@ function showTab(which) {
   $("#panel-acct").hidden = msg;
   $("#result").hidden = true;
   hideError();
-  current = null;
+  forget();
 }
 
-function upload(path, file, extra) {
+function upload(path, file, extra, stages, preview) {
   const fd = new FormData();
   fd.append("file", file);
   for (const [k, v] of Object.entries(extra || {})) fd.append(k, v);
-  return run(path, { method: "POST", body: fd });
+  return run(path, { method: "POST", body: fd }, stages, preview);
 }
+
+function checkShot(file) {
+  return upload("/api/check/screenshot", file, null, ["stage_shot", "stage_rules", ...aiStages()],
+    URL.createObjectURL(file));
+}
+
+const acctStages = () => ($("#read-images").checked ? ["stage_checks", "stage_compare"] : ["stage_compare"]);
 
 function wire() {
   $("#lang").addEventListener("click", () => { lang = lang === "ko" ? "en" : "ko"; store.set("lang", lang); applyLang(); });
@@ -296,25 +336,26 @@ function wire() {
     const text = $("#msg-text").value.trim();
     if (!text) { showError("empty"); return; }
     run("/api/check/message", { method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, sender: $("#msg-sender").value.trim() || null }) });
+      body: JSON.stringify({ text, sender: $("#msg-sender").value.trim() || null }) },
+      ["stage_rules", ...aiStages()]);
   });
 
   $("#shot-btn").addEventListener("click", () => (status.model ? $("#shot-file").click() : showError("needs_model")));
   $("#vm-btn").addEventListener("click", () => (status.model ? $("#vm-file").click() : showError("needs_model")));
   $("#shot-file").addEventListener("change", (e) => {
     const f = e.target.files[0]; e.target.value = "";
-    if (f) upload("/api/check/screenshot", f);
+    if (f) checkShot(f);
   });
   $("#vm-file").addEventListener("change", (e) => {
     const f = e.target.files[0]; e.target.value = "";
-    if (f) upload("/api/check/voicemail", f, { lang });
+    if (f) upload("/api/check/voicemail", f, { lang }, ["stage_vm", "stage_rules", ...aiStages()]);
   });
 
   $("#demo-acct").addEventListener("click", () => {
     const fd = new FormData();
     fd.append("use_demo", "true");
     fd.append("read_images", String($("#read-images").checked));
-    run("/api/check/account", { method: "POST", body: fd });
+    run("/api/check/account", { method: "POST", body: fd }, acctStages());
   });
   $("#acct-form").addEventListener("submit", (e) => {
     e.preventDefault();
@@ -324,18 +365,38 @@ function wire() {
     fd.append("paid", paid);
     fd.append("wrote", wrote);
     fd.append("read_images", String($("#read-images").checked));
-    run("/api/check/account", { method: "POST", body: fd });
+    run("/api/check/account", { method: "POST", body: fd }, acctStages());
   });
 }
 
 async function loadExamples() {
-  const list = await fetch("/api/demo/messages").then((r) => r.json()).catch(() => []);
-  if (!list.length) return;
-  $("#example-list").replaceChildren(...list.map((m) => el("button", { type: "button", onclick: () => {
-    $("#msg-text").value = m.text;
-    $("#msg-sender").value = m.sender || "";
-    $("#msg-form").requestSubmit();
-  } }, el("span", {}, (CHANNEL_ICON[m.channel] || "💬") + " " + m.text))));
+  const get = (path) => fetch(path).then((r) => r.json()).catch(() => []);
+  const [messages, shots] = await Promise.all([get("/api/demo/messages"),
+    status.model ? get("/api/demo/screenshots") : []]);
+  examples = { messages, shots };
+  renderExamples();
+}
+
+async function tryShot(s) {
+  try {
+    const blob = await fetch(s.url).then((r) => { if (!r.ok) throw new Error(); return r.blob(); });
+    checkShot(new File([blob], s.id + ".png", { type: blob.type || "image/png" }));
+  } catch {
+    showError("network");
+  }
+}
+
+function renderExamples() {
+  const { messages, shots } = examples;
+  if (!messages.length && !shots.length) return;
+  $("#example-list").replaceChildren(
+    ...shots.map((s) => el("button", { type: "button", onclick: () => tryShot(s) },
+      el("span", {}, "📷 " + (s.label[lang] || s.label.en)))),
+    ...messages.map((m) => el("button", { type: "button", onclick: () => {
+      $("#msg-text").value = m.text;
+      $("#msg-sender").value = m.sender || "";
+      $("#msg-form").requestSubmit();
+    } }, el("span", {}, (CHANNEL_ICON[m.channel] || "💬") + " " + m.text))));
   $("#examples").hidden = false;
 }
 

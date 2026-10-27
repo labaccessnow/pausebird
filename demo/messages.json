@@ -27,5 +27,11 @@
      "text": "Your appointment at Maple Dental is tomorrow at 10:00 AM. Reply C to confirm."},
     {"id": "ko-family-ok", "channel": "kakaotalk", "sender": "딸", "expect": "SAFE",
      "text": "아빠 일요일에 애들 데리고 갈게요. 저녁 같이 먹어요."}
+  ],
+  "screenshots": [
+    {"id": "shot-ko-delivery", "file": "shot-ko-delivery.png", "expect": "SCAM",
+     "label": {"en": "Korean delivery text", "ko": "택배 사칭 문자"}},
+    {"id": "shot-en-toll", "file": "shot-en-toll.png", "expect": "SCAM",
+     "label": {"en": "Unpaid toll text", "ko": "통행료 미납 문자"}}
   ]
 }

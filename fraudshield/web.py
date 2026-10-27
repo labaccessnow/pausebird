@@ -173,6 +173,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     if demo:
         app.mount("/demo-checks", StaticFiles(directory=DEMO / "checks"), name="demo-checks")
+        app.mount("/demo-media", StaticFiles(directory=DEMO / "media"), name="demo-media")
 
     @app.get("/", include_in_schema=False)
     def index():
@@ -194,6 +195,11 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     @app.get("/api/demo/messages")
     def demo_messages():
         return [{k: m[k] for k in ("id", "channel", "sender", "text")} for m in demo_data.get("messages", [])]
+
+    @app.get("/api/demo/screenshots")
+    def demo_screenshots():
+        return [{"id": s["id"], "url": "/demo-media/" + s["file"], "label": s["label"]}
+                for s in demo_data.get("screenshots", [])]
 
     @app.post("/api/check/message")
     def check_message(m: MessageIn):
