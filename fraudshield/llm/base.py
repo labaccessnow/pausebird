@@ -25,7 +25,7 @@ class Brain(Protocol):
     def transcribe(self, audio: bytes, mime: str, lang_hint: str = "ko") -> Optional[str]: ...
     def read_check(self, image: bytes, mime: str) -> Optional[CheckItem]: ...
     def judge(self, text: str, signals: list[Signal]) -> Optional[tuple[int, str]]: ...
-    def explain(self, text: str, signals: list[Signal], level: Level) -> Optional[dict[str, str]]: ...
+    def explain(self, msg: Message, signals: list[Signal], level: Level) -> Optional[dict[str, str]]: ...
 
 
 class OfflineBrain:
@@ -43,7 +43,7 @@ class OfflineBrain:
     def judge(self, text, signals):
         return None
 
-    def explain(self, text, signals, level):
+    def explain(self, msg, signals, level):
         return None
 
 
@@ -74,9 +74,9 @@ class FallbackBrain:
             log.warning("judge failed, rules only: %s", e)
             return None
 
-    def explain(self, text, signals, level):
+    def explain(self, msg, signals, level):
         try:
-            return self.inner.explain(text, signals, level)
+            return self.inner.explain(msg, signals, level)
         except Exception as e:  # noqa: BLE001
             log.warning("explain failed, using the template: %s", e)
             return None

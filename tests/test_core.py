@@ -127,7 +127,7 @@ def test_bad_csv_says_what_is_wrong():
 # --- model explanations ------------------------------------------------------
 def test_one_explanation_call_gives_both_languages():
     class Brain(OfflineBrain):
-        def explain(self, text, signals, level):
+        def explain(self, msg, signals, level):
             self.level = level
             return {"en": "Dad, this is a scam.", "ko": "아버지, 사기 문자예요."}
 
@@ -150,6 +150,8 @@ def test_explanation_prompt_uses_the_parent_names(monkeypatch):
 
     monkeypatch.setattr(b, "_chat", fake_chat)
     sig = patterns.scan("Pay with gift cards today and don't tell anyone")
-    assert b.explain("text", sig, Level.SCAM) == {"en": "Dad, delete it.", "ko": "아버지, 지우세요."}
+    out = b.explain(Message(text="text", channel="voicemail"), sig, Level.SCAM)
+    assert out == {"en": "Dad, delete it.", "ko": "아버지, 지우세요."}
     assert 'Call them "아버지"' in seen["prompt"] and "Verdict: SCAM" in seen["prompt"]
+    assert "call it 음성 메시지" in seen["prompt"] and "received this voicemail" in seen["prompt"]
     assert seen["effort"] == "minimal"

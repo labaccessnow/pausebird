@@ -88,7 +88,7 @@ def check_message(msg: Message, brain: Optional[Brain] = None, online: bool = Fa
     score = min(100, sum(s.weight for s in sig))
     level = _level(score, sig)
     en, ko = _summary(level, sig)
-    plain = brain.explain(msg.text, sig, level) or {}
+    plain = brain.explain(msg, sig, level) or {}
     return Verdict(level=level, score=score, signals=sig,
                    summary_en=plain.get("en") or en, summary_ko=plain.get("ko") or ko,
                    next_steps=playbooks.steps("message") if level != Level.SAFE else [],

@@ -69,6 +69,9 @@ TODO = {
     Level.SAFE: "Tell them it looks fine, and that real family and companies never need codes, passwords "
                 "or gift cards by text.",
 }
+# What to call the message in each language, so a voicemail isn't called a text.
+KIND = {"sms": ("text message", "문자"), "kakaotalk": ("KakaoTalk message", "카카오톡 메시지"),
+        "email": ("email", "이메일"), "voicemail": ("voicemail", "음성 메시지")}
 
 
 class MetaBrain:
@@ -148,16 +151,18 @@ class MetaBrain:
             system="You are a careful fraud analyst protecting older family members."))
         return round(out["scam_likelihood"] * 0.3), out["reason"]
 
-    def explain(self, text: str, signals: list[Signal], level: Level) -> Optional[dict[str, str]]:
+    def explain(self, msg: Message, signals: list[Signal], level: Level) -> Optional[dict[str, str]]:
         if not signals:
             return None
         ev = "\n".join(f"- {s.detail_en}" for s in sorted(signals, key=lambda s: -s.weight)[:4])
+        kind_en, kind_ko = KIND.get(msg.channel, ("message", "메시지"))
         out = json.loads(self._chat(
-            f"Message:\n---\n{text}\n---\nVerdict: {level.name}. Why:\n{ev}\n\n"
+            f"A parent received this {kind_en}:\n---\n{msg.text}\n---\nVerdict: {level.name}. Why:\n{ev}\n\n"
             f"Write 2-3 short, calm sentences for an older parent: what this is and what to do. {TODO[level]} "
             f"Never tell them to call or click anything in the message. No jargon.\n"
-            f"en: plain English. Call them \"{self.parent_en}\".\n"
-            f"ko: simple Korean in polite 존댓말. Call them \"{self.parent_ko}\" and never by any other title.\n"
+            f"en: plain English. Call them \"{self.parent_en}\" and call it a {kind_en}.\n"
+            f"ko: simple Korean in polite 존댓말. Call them \"{self.parent_ko}\" and never by any other title; "
+            f"call it {kind_ko}.\n"
             "Speak as a helper, not as a family member: say \"tell your family\", not \"tell me\".",
             EXPLAIN, system="You explain scams kindly and simply to older adults.", effort="minimal"))
         return {"en": out["en"].strip(), "ko": out["ko"].strip()}
