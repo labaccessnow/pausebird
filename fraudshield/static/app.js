@@ -172,6 +172,7 @@ async function call(path, opts, keepResult, stages) {
     } catch {
       throw new Error("network");
     }
+    if (res.status === 401) { location.reload(); throw new Error("locked"); }  // passcode cookie gone
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(typeof body.detail === "string" ? body.detail : "other");
     return body;

@@ -3,23 +3,29 @@ red / yellow / green answer — or check which paid checks you never wrote.
 
 Nothing is stored. Uploads are read in memory and dropped. The last few verdicts stay
 in memory only, so "Tell my family" and the phone's Share button can point at them.
+
+Put on the internet with FRAUDSHIELD_PASSCODE set: everything but the page shell then
+needs the passcode once per phone (a long-lived cookie), so strangers can't spend the AI budget.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
 import io
 import json
 import mimetypes
 import os
 import re
 import secrets
+import time
 from collections import OrderedDict
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import quote
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 from pydantic import BaseModel, Field
@@ -37,6 +43,9 @@ MAX_AUDIO = 32 * 2**20      # Muse Voice Transcribe's limit
 MAX_CSV = 2**20
 MAX_SIDE = 2000             # screenshots are shrunk to this before the model sees them (fewer tokens)
 KEEP = 200                  # verdicts kept in memory for the alert and share buttons
+COOKIE = "ffs_pass"
+LOGIN_TRIES = 10            # wrong passcodes allowed per 10 minutes, across everyone
+OPEN_PATHS = ("/manifest.webmanifest", "/sw.js", "/api/login")  # plus /static/: the shell, no data
 
 mimetypes.add_type("audio/mp4", ".m4a")
 
@@ -49,6 +58,10 @@ class MessageIn(BaseModel):
 
 class AlertIn(BaseModel):
     id: str = Field(max_length=40)
+
+
+class LoginIn(BaseModel):
+    code: str = Field(min_length=1, max_length=64)
 
 
 def defang(s: str) -> str:
@@ -125,7 +138,8 @@ def _eyes(fn: Callable, *args):
 
 def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier] = None,
                rdap: Optional[Callable[[str], Optional[int]]] = None, demo: Optional[bool] = None,
-               offline: Optional[bool] = None, parent: Optional[str] = None, lang: Optional[str] = None) -> FastAPI:
+               offline: Optional[bool] = None, parent: Optional[str] = None, lang: Optional[str] = None,
+               passcode: Optional[str] = None) -> FastAPI:
     env = os.environ.get
     offline = offline if offline is not None else env("FRAUDSHIELD_OFFLINE") == "1"
     raw_brain = brain or pick_brain(offline)
@@ -135,6 +149,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     demo = demo if demo is not None else env("FRAUDSHIELD_DEMO", "1") == "1"
     parent = parent or env("FRAUDSHIELD_PARENT", "Dad")
     lang = lang or env("FRAUDSHIELD_LANG", "en")
+    passcode = passcode if passcode is not None else env("FRAUDSHIELD_PASSCODE") or None
     demo_data = json.loads((DEMO / "messages.json").read_text(encoding="utf-8")) if demo else {}
 
     if rdap is None:
@@ -170,6 +185,8 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
             raise HTTPException(503, "needs_model")
 
     app = FastAPI(title="Family Fraud Shield", docs_url=None, redoc_url=None, openapi_url=None)
+    if passcode:
+        _lock(app, passcode)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     if demo:
         app.mount("/demo-checks", StaticFiles(directory=DEMO / "checks"), name="demo-checks")
@@ -286,3 +303,37 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
         return RedirectResponse(f"/#r={r['id']}", status_code=303)
 
     return app
+
+
+def _lock(app: FastAPI, passcode: str) -> None:
+    """Ask for the passcode once per phone. The cookie holds an HMAC of the passcode, so
+    changing the passcode signs everyone out. Wrong tries are counted for everyone together:
+    simple, and enough to stop guessing (one person can lock it for 10 minutes, at worst)."""
+    token = hmac.new(passcode.encode(), b"family-fraud-shield", hashlib.sha256).hexdigest().encode()
+    fails: list[float] = []
+
+    @app.middleware("http")
+    async def need_passcode(request: Request, call_next):
+        path = request.url.path
+        if path.startswith("/static/") or path in OPEN_PATHS or \
+                hmac.compare_digest(request.cookies.get(COOKIE, "").encode(), token):
+            return await call_next(request)
+        if path == "/":
+            return FileResponse(STATIC / "login.html", headers={"Cache-Control": "no-cache"})
+        if path == "/share":
+            return RedirectResponse("/", status_code=303)
+        return JSONResponse({"detail": "locked"}, status_code=401)
+
+    @app.post("/api/login")
+    def login(body: LoginIn, request: Request):
+        now = time.monotonic()
+        fails[:] = [t for t in fails if now - t < 600]
+        if len(fails) >= LOGIN_TRIES:
+            raise HTTPException(429, "slow_down")
+        if not hmac.compare_digest(body.code.strip().encode(), passcode.encode()):
+            fails.append(now)
+            raise HTTPException(403, "wrong_code")
+        r = JSONResponse({"ok": True})
+        https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+        r.set_cookie(COOKIE, token.decode(), max_age=400 * 86400, httponly=True, secure=https, samesite="lax")
+        return r

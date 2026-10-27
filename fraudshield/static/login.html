@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d4ed8">
+<title>Family Fraud Shield</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/static/icon-192.png">
+<link rel="apple-touch-icon" href="/static/icon-180.png">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<main class="login">
+  <img src="/static/icon-192.png" alt="" width="72" height="72">
+  <h1>가족 사기 방지<span lang="en">Family Fraud Shield</span></h1>
+  <form id="login" class="card">
+    <label for="code">비밀번호를 넣으세요<span lang="en">Enter the passcode</span></label>
+    <input id="code" type="password" inputmode="numeric" autocomplete="current-password" maxlength="64" required>
+    <button class="primary" type="submit">들어가기 · Open</button>
+  </form>
+  <p id="msg" class="error" role="alert" hidden></p>
+  <p class="note">가족이 알려 준 번호입니다. 한 번만 넣으면 됩니다.<br>
+    <span lang="en">Your family gave you this number. You only need to enter it once.</span></p>
+</main>
+<script src="/static/login.js"></script>
+</body>
+</html>

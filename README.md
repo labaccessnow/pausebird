@@ -93,6 +93,7 @@ Settings (environment variables):
 | `FRAUDSHIELD_LANG` | page language when the phone isn't set to Korean | `en` |
 | `FRAUDSHIELD_DEMO` | show the example messages and demo checkbook | `1` |
 | `FRAUDSHIELD_OFFLINE` | no model and no registry lookups | `0` |
+| `FRAUDSHIELD_PASSCODE` | ask for this passcode once per phone (set it when the page is on the internet) | none |
 
 Installing the page and the Share button need HTTPS, except on `localhost`.
 

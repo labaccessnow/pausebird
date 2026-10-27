@@ -157,3 +157,24 @@ def test_voicemail_with_ears():
 
 def test_defang():
     assert defang("https://bad.example.top/x") == "hxxps://bad[.]example[.]top/x"
+
+
+def test_passcode_locks_everything_but_the_shell():
+    c, _ = client(passcode="20261104")
+    assert "passcode" in c.get("/").text and c.get("/static/style.css").status_code == 200
+    assert c.get("/api/status").status_code == 401
+    assert c.post("/api/check/message", json={"text": "hi"}).status_code == 401
+    shared = c.post("/share", data={"text": "x"}, follow_redirects=False)
+    assert shared.status_code == 303 and shared.headers["location"] == "/"
+    assert c.post("/api/login", json={"code": "1234"}).json()["detail"] == "wrong_code"
+    assert c.post("/api/login", json={"code": " 20261104 "}).status_code == 200
+    assert c.get("/api/status").status_code == 200
+    assert "Check a message" in c.get("/").text
+
+
+def test_passcode_guessing_is_slowed_down():
+    c, _ = client(passcode="20261104")
+    codes = [c.post("/api/login", json={"code": str(n)}).status_code for n in range(11)]
+    assert codes[:10] == [403] * 10 and codes[10] == 429
+    assert c.post("/api/login", json={"code": "20261104"}).status_code == 429
+

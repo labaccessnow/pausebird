@@ -64,7 +64,7 @@ h1 { font-size: 1.25rem; margin: 0; line-height: 1.2; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; padding: 16px; }
 .card p { margin-top: 0; }
 label { display: block; font-weight: 700; margin: 6px 0; }
-textarea, input[type="text"] {
+textarea, input[type="text"], input[type="password"] {
   width: 100%; font: inherit; color: var(--text); background: var(--bg);
   border: 2px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 12px;
 }
@@ -161,6 +161,14 @@ code, .evidence { font-family: var(--mono); font-size: .8rem; word-break: break-
 
 footer { color: var(--muted); font-size: .8rem; padding-top: 18px; padding-bottom: 32px; text-align: center; }
 footer p { margin: 4px 0; }
+
+/* passcode screen */
+.login { max-width: 440px; margin: 0 auto; padding: 40px 16px; text-align: center; }
+.login img { border-radius: 16px; }
+.login h1 { font-size: 1.5rem; margin: 14px 0 20px; }
+.login h1 span, .login label span { display: block; font-size: .8em; font-weight: 600; color: var(--muted); }
+.login form { text-align: left; }
+.login input { font-size: 1.4rem; letter-spacing: .2em; text-align: center; }
 
 /* Korean: break lines between words, not in the middle of one */
 :lang(ko) body, html:lang(ko) { word-break: keep-all; overflow-wrap: anywhere; }
