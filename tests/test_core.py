@@ -5,6 +5,7 @@ from pathlib import Path
 from fraudshield import agent, extract
 from fraudshield.checks import accounts, links, patterns, phones
 from fraudshield.ledger import parse_checks, read_checks
+from fraudshield.llm.base import OfflineBrain
 from fraudshield.models import CheckItem, Level, Message
 
 DEMO = Path(__file__).resolve().parent.parent / "demo"
@@ -121,3 +122,34 @@ def test_bad_csv_says_what_is_wrong():
         parse_checks("number,payee\n1,x\n")
     with pytest.raises(ValueError, match="row 2"):
         parse_checks("number,amount,payee\nabc,5,x\n")
+
+
+# --- model explanations ------------------------------------------------------
+def test_one_explanation_call_gives_both_languages():
+    class Brain(OfflineBrain):
+        def explain(self, text, signals, level):
+            self.level = level
+            return {"en": "Dad, this is a scam.", "ko": "아버지, 사기 문자예요."}
+
+    b = Brain()
+    text = "Chase Alert: account suspended. Verify: http://chase-secure-login.com.verify-acct.xyz/login"
+    v = agent.check_message(Message(text=text), brain=b)
+    assert b.level == Level.SCAM
+    assert (v.summary_en, v.summary_ko) == ("Dad, this is a scam.", "아버지, 사기 문자예요.")
+
+
+def test_explanation_prompt_uses_the_parent_names(monkeypatch):
+    from fraudshield.llm.meta import MetaBrain
+
+    monkeypatch.setenv("FRAUDSHIELD_PARENT_KO", "아버지")
+    b, seen = MetaBrain(api_key="test"), {}
+
+    def fake_chat(content, fmt=None, system=None, effort="low"):
+        seen.update(prompt=content, effort=effort)
+        return json.dumps({"en": " Dad, delete it. ", "ko": "아버지, 지우세요."})
+
+    monkeypatch.setattr(b, "_chat", fake_chat)
+    sig = patterns.scan("Pay with gift cards today and don't tell anyone")
+    assert b.explain("text", sig, Level.SCAM) == {"en": "Dad, delete it.", "ko": "아버지, 지우세요."}
+    assert 'Call them "아버지"' in seen["prompt"] and "Verdict: SCAM" in seen["prompt"]
+    assert seen["effort"] == "minimal"

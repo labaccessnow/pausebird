@@ -4,14 +4,14 @@
 - transcribe: a voicemail -> words
 - read_check: a check image -> number, amount, payee, MICR number, anything that looks altered
 - judge: a second opinion on a message, given the rule evidence (it may add, never erase)
-- explain: turn the evidence into a few calm sentences for a parent, in their language
+- explain: turn the verdict and evidence into a few calm sentences for a parent, in English and Korean
 """
 from __future__ import annotations
 
 import logging
 from typing import Optional, Protocol
 
-from ..models import CheckItem, Message, Signal
+from ..models import CheckItem, Level, Message, Signal
 
 log = logging.getLogger("fraudshield.llm")
 
@@ -25,7 +25,7 @@ class Brain(Protocol):
     def transcribe(self, audio: bytes, mime: str, lang_hint: str = "ko") -> Optional[str]: ...
     def read_check(self, image: bytes, mime: str) -> Optional[CheckItem]: ...
     def judge(self, text: str, signals: list[Signal]) -> Optional[tuple[int, str]]: ...
-    def explain(self, text: str, signals: list[Signal], lang: str) -> Optional[str]: ...
+    def explain(self, text: str, signals: list[Signal], level: Level) -> Optional[dict[str, str]]: ...
 
 
 class OfflineBrain:
@@ -43,7 +43,7 @@ class OfflineBrain:
     def judge(self, text, signals):
         return None
 
-    def explain(self, text, signals, lang):
+    def explain(self, text, signals, level):
         return None
 
 
@@ -74,9 +74,9 @@ class FallbackBrain:
             log.warning("judge failed, rules only: %s", e)
             return None
 
-    def explain(self, text, signals, lang):
+    def explain(self, text, signals, level):
         try:
-            return self.inner.explain(text, signals, lang)
+            return self.inner.explain(text, signals, level)
         except Exception as e:  # noqa: BLE001
             log.warning("explain failed, using the template: %s", e)
             return None

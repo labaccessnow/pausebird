@@ -38,7 +38,7 @@ class FakeEyes:
     def judge(self, text, signals):
         return None
 
-    def explain(self, text, signals, lang):
+    def explain(self, text, signals, level):
         return None
 
 

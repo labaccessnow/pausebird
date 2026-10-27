@@ -14,13 +14,14 @@ import json
 import os
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Optional
 
 import httpx
 from openai import OpenAI
 
-from ..models import CheckItem, Message, Signal
+from ..models import CheckItem, Level, Message, Signal
 from .base import BudgetExceeded
 
 BASE_URL = "https://api.meta.ai/v1"
@@ -56,6 +57,18 @@ JUDGE = _schema("scam_judgement", {
     "scam_likelihood": {"type": "integer", "description": "0-100"},
     "reason": {"type": "string", "description": "One plain sentence."},
 })
+EXPLAIN = _schema("plain_explanation", {
+    "en": {"type": "string", "description": "The explanation in plain English."},
+    "ko": {"type": "string", "description": "The same explanation in simple, polite Korean."},
+})
+# What the explanation should tell the parent to do, by verdict.
+TODO = {
+    Level.SCAM: "Tell them not to reply, click, call back or pay, to delete it, and to tell their family.",
+    Level.CAUTION: "Tell them to check it first by calling the company or person on a number they already "
+                   "know, never one from the message.",
+    Level.SAFE: "Tell them it looks fine, and that real family and companies never need codes, passwords "
+                "or gift cards by text.",
+}
 
 
 class MetaBrain:
@@ -67,6 +80,10 @@ class MetaBrain:
             raise RuntimeError("Contributor models train on inputs — not allowed for family data")
         self.client = OpenAI(api_key=self.key, base_url=BASE_URL)
         self.budget = budget_usd if budget_usd is not None else float(os.environ.get("FRAUDSHIELD_BUDGET_USD", "140"))
+        # How the explanations address the parent, so the Korean doesn't guess a title.
+        self.parent_en = os.environ.get("FRAUDSHIELD_PARENT", "Dad")
+        self.parent_ko = os.environ.get("FRAUDSHIELD_PARENT_KO", "아버지")
+        self._lock = threading.Lock()  # check images are read in parallel; keep the spend count exact
 
     # --- cost guard -----------------------------------------------------
     def _spent(self) -> float:
@@ -76,19 +93,24 @@ class MetaBrain:
             return 0.0
 
     def _add(self, usd: float) -> None:
-        USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        USAGE_FILE.write_text(json.dumps({"usd": round(self._spent() + usd, 6)}), encoding="utf-8")
+        with self._lock:
+            USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
+            USAGE_FILE.write_text(json.dumps({"usd": round(self._spent() + usd, 6)}), encoding="utf-8")
 
     def _guard(self) -> None:
         if self._spent() >= self.budget:
             raise BudgetExceeded(f"budget ${self.budget:.2f} reached (spent ${self._spent():.2f})")
 
     # --- plumbing -------------------------------------------------------
-    def _chat(self, content: list | str, fmt: Optional[dict] = None, system: Optional[str] = None) -> str:
+    def _chat(self, content: list | str, fmt: Optional[dict] = None, system: Optional[str] = None,
+              effort: str = "low") -> str:
+        """Muse Spark thinks before it answers, and the thinking is billed and slow. Reading and judging
+        get "low"; writing the plain explanation needs no thinking, so it uses "minimal"."""
         self._guard()
         msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": content}]
         kw = {"response_format": fmt} if fmt else {}
-        r = self.client.chat.completions.create(model=CHAT_MODEL, messages=msgs, temperature=0.1, **kw)
+        r = self.client.chat.completions.create(model=CHAT_MODEL, messages=msgs, temperature=0.1,
+                                                reasoning_effort=effort, **kw)
         if r.usage:
             self._add(r.usage.prompt_tokens / 1e6 * PRICE_IN + r.usage.completion_tokens / 1e6 * PRICE_OUT)
         return r.choices[0].message.content or ""
@@ -126,16 +148,19 @@ class MetaBrain:
             system="You are a careful fraud analyst protecting older family members."))
         return round(out["scam_likelihood"] * 0.3), out["reason"]
 
-    def explain(self, text: str, signals: list[Signal], lang: str) -> Optional[str]:
+    def explain(self, text: str, signals: list[Signal], level: Level) -> Optional[dict[str, str]]:
         if not signals:
             return None
         ev = "\n".join(f"- {s.detail_en}" for s in sorted(signals, key=lambda s: -s.weight)[:4])
-        language = "Korean (polite 존댓말, simple words)" if lang == "ko" else "plain English"
-        return self._chat(
-            f"Message:\n---\n{text}\n---\nWhy it looks like a scam:\n{ev}\n\n"
-            f"Write 2-3 short, calm sentences in {language} for an older parent: what this is and what to do. "
-            "Never tell them to call or click anything in the message. No jargon.",
-            system="You explain scams kindly and simply to older adults.").strip()
+        out = json.loads(self._chat(
+            f"Message:\n---\n{text}\n---\nVerdict: {level.name}. Why:\n{ev}\n\n"
+            f"Write 2-3 short, calm sentences for an older parent: what this is and what to do. {TODO[level]} "
+            f"Never tell them to call or click anything in the message. No jargon.\n"
+            f"en: plain English. Call them \"{self.parent_en}\".\n"
+            f"ko: simple Korean in polite 존댓말. Call them \"{self.parent_ko}\" and never by any other title.\n"
+            "Speak as a helper, not as a family member: say \"tell your family\", not \"tell me\".",
+            EXPLAIN, system="You explain scams kindly and simply to older adults.", effort="minimal"))
+        return {"en": out["en"].strip(), "ko": out["ko"].strip()}
 
     def transcribe(self, audio: bytes, mime: str, lang_hint: str = "ko") -> Optional[str]:
         """Voicemail -> words. Muse Voice Transcribe wants mono 16-bit PCM WAV."""

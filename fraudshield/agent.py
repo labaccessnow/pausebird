@@ -7,6 +7,7 @@ hard rule hit — that's what keeps the verdict verifiable.
 from __future__ import annotations
 
 import mimetypes
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -87,10 +88,9 @@ def check_message(msg: Message, brain: Optional[Brain] = None, online: bool = Fa
     score = min(100, sum(s.weight for s in sig))
     level = _level(score, sig)
     en, ko = _summary(level, sig)
-    plain_ko = brain.explain(msg.text, sig, "ko")
-    plain_en = brain.explain(msg.text, sig, "en")
+    plain = brain.explain(msg.text, sig, level) or {}
     return Verdict(level=level, score=score, signals=sig,
-                   summary_en=plain_en or en, summary_ko=plain_ko or ko,
+                   summary_en=plain.get("en") or en, summary_ko=plain.get("ko") or ko,
                    next_steps=playbooks.steps("message") if level != Level.SAFE else [],
                    model_opinion=opinion[1] if opinion else None)
 
@@ -98,14 +98,16 @@ def check_message(msg: Message, brain: Optional[Brain] = None, online: bool = Fa
 def read_check_images(cleared: list[CheckItem], brain: Brain) -> list[CheckItem]:
     """Let the model look at each paid check. The bank's number, amount and payee stay as the
     bank reported them; the eyes add the MICR number and any signs of tampering."""
-    out = []
-    for c in cleared:
-        seen = None
-        if c.image:
-            mime = mimetypes.guess_type(c.image)[0] or "image/png"
-            seen = brain.read_check(Path(c.image).read_bytes(), mime)
-        out.append(c.model_copy(update={"micr_number": seen.micr_number, "notes": seen.notes}) if seen else c)
-    return out
+    def look(c: CheckItem) -> CheckItem:
+        if not c.image:
+            return c
+        mime = mimetypes.guess_type(c.image)[0] or "image/png"
+        seen = brain.read_check(Path(c.image).read_bytes(), mime)
+        return c.model_copy(update={"micr_number": seen.micr_number, "notes": seen.notes}) if seen else c
+
+    # One model call per check; four at a time instead of one after another.
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return list(pool.map(look, cleared))
 
 
 def check_account(cleared: list[CheckItem], register: list[CheckItem]) -> tuple[Verdict, list[CheckFinding]]:
