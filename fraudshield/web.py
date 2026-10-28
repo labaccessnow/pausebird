@@ -185,7 +185,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
         if not model_on:
             raise HTTPException(503, "needs_model")
 
-    app = FastAPI(title="Family Fraud Shield", docs_url=None, redoc_url=None, openapi_url=None)
+    app = FastAPI(title="Pausebird", docs_url=None, redoc_url=None, openapi_url=None)
     if passcode:
         _lock(app, passcode)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
@@ -286,7 +286,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     @app.post("/share", include_in_schema=False)
     def share(title: str = Form(""), text: str = Form(""), url: str = Form(""),
               media: list[UploadFile] = File(default=[])):
-        """Android 'Share to Fraud Shield' lands here (manifest share_target)."""
+        """Android 'Share to Pausebird' lands here (manifest share_target)."""
         f = media[0] if media else None
         kind = (f.content_type or "") if f else ""
         try:

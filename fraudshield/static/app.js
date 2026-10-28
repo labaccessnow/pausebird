@@ -1,10 +1,10 @@
-// Family Fraud Shield — phone page. Everything from the server or the user is put on the page
+// Pausebird — phone page. Everything from the server or the user is put on the page
 // with textContent, never as HTML, so a scam message can't inject anything.
 "use strict";
 
 const T = {
   en: {
-    title: "Family Fraud Shield",
+    title: "Pausebird",
     tagline: "Not sure about a message? Check it here before you reply.",
     tab_msg: "Check a message", tab_acct: "Check my checks",
     paste_label: "Paste the message",
@@ -55,7 +55,7 @@ const T = {
     err_other: "Something went wrong. Please try again.",
   },
   ko: {
-    title: "가족 사기 방지",
+    title: "Pausebird",
     tagline: "의심스러운 메시지가 있나요? 답장하기 전에 여기서 확인하세요.",
     tab_msg: "메시지 확인", tab_acct: "수표 확인",
     paste_label: "메시지를 붙여 넣으세요",

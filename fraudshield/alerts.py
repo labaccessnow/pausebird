@@ -73,7 +73,7 @@ def family_alert(who: str, verdict: Verdict, what: str) -> tuple[str, str]:
     else:
         title = f"{who}: something to double-check"
     reasons = [s.detail_en for s in sorted(verdict.signals, key=lambda s: -s.weight)[:2]]
-    body = (f"Family Fraud Shield checked {what} for {who}.\n"
+    body = (f"Pausebird checked {what} for {who}.\n"
             + "\n".join(f"- {r}" for r in reasons)
             + f"\nPlease call {who} to check in.")
     return title, body

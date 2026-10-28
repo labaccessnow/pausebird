@@ -1,6 +1,6 @@
 {
-  "name": "Family Fraud Shield",
-  "short_name": "Fraud Shield",
+  "name": "Pausebird",
+  "short_name": "Pausebird",
   "description": "Check a message or your paid checks for scams, in English or Korean.",
   "start_url": "/",
   "scope": "/",

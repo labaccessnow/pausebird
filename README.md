@@ -1,4 +1,4 @@
-# Family Fraud Shield
+# Pausebird
 
 Catches scam messages and fake checks before an older parent loses money — and tells the family.
 
@@ -65,6 +65,8 @@ Safety details: scam links are shown as `hxxps://bad[.]top` so they can't be tap
 not turned into links, nothing is saved, and the service worker caches nothing.
 
 ## Run it
+
+The Python package and settings still use the working name `fraudshield`.
 
 ```bash
 uv venv && uv pip install -e ".[dev]"

@@ -56,7 +56,7 @@ def png() -> bytes:
 
 def test_page_and_status():
     c, _ = client()
-    assert "Family Fraud Shield" in c.get("/").text
+    assert "Pausebird" in c.get("/").text
     assert c.get("/manifest.webmanifest").json()["share_target"]["action"] == "/share"
     assert c.get("/api/status").json() == {"model": False, "demo": True, "parent": "Dad", "lang": "en",
                                            "alerts": "console"}
