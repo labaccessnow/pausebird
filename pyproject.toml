@@ -9,7 +9,6 @@ dependencies = [
     "pydantic>=2",
     "phonenumbers",
     "httpx",
-    "openai>=1.40",
     "pillow",
     "fastapi",
     "uvicorn[standard]",

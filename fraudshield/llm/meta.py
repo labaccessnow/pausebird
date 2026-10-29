@@ -15,11 +15,11 @@ import os
 import subprocess
 import tempfile
 import threading
+import time
 from pathlib import Path
 from typing import Optional
 
 import httpx
-from openai import OpenAI
 
 from ..models import CheckItem, Level, Message, Signal
 from .base import BudgetExceeded
@@ -81,7 +81,8 @@ class MetaBrain:
             raise RuntimeError("MODEL_API_KEY is not set")
         if "contributor" in CHAT_MODEL:
             raise RuntimeError("Contributor models train on inputs — not allowed for family data")
-        self.client = OpenAI(api_key=self.key, base_url=BASE_URL)
+        # Plain HTTP, not the OpenAI SDK: Windows Smart App Control blocks the SDK's compiled jiter module.
+        self.http = httpx.Client(base_url=BASE_URL, timeout=120, headers={"Authorization": f"Bearer {self.key}"})
         self.budget = budget_usd if budget_usd is not None else float(os.environ.get("FRAUDSHIELD_BUDGET_USD", "140"))
         # How the explanations address the parent, so the Korean doesn't guess a title.
         self.parent_en = os.environ.get("FRAUDSHIELD_PARENT", "Dad")
@@ -111,12 +112,29 @@ class MetaBrain:
         get "low"; writing the plain explanation needs no thinking, so it uses "minimal"."""
         self._guard()
         msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": content}]
-        kw = {"response_format": fmt} if fmt else {}
-        r = self.client.chat.completions.create(model=CHAT_MODEL, messages=msgs, temperature=0.1,
-                                                reasoning_effort=effort, **kw)
-        if r.usage:
-            self._add(r.usage.prompt_tokens / 1e6 * PRICE_IN + r.usage.completion_tokens / 1e6 * PRICE_OUT)
-        return r.choices[0].message.content or ""
+        body = {"model": CHAT_MODEL, "messages": msgs, "temperature": 0.1, "reasoning_effort": effort}
+        if fmt:
+            body["response_format"] = fmt
+        r = self._post("/chat/completions", body)
+        if usage := r.get("usage"):
+            self._add(usage["prompt_tokens"] / 1e6 * PRICE_IN + usage["completion_tokens"] / 1e6 * PRICE_OUT)
+        return r["choices"][0]["message"].get("content") or ""
+
+    def _post(self, path: str, body: dict, tries: int = 3) -> dict:
+        """POST JSON, retrying a dropped connection, 429 or 5xx twice (what the OpenAI SDK used to do)."""
+        for n in range(1, tries + 1):
+            try:
+                r = self.http.post(path, json=body)
+                if (r.status_code in (408, 409, 429) or r.status_code >= 500) and n < tries:
+                    raise httpx.HTTPStatusError(f"HTTP {r.status_code}", request=r.request, response=r)
+            except (httpx.TransportError, httpx.HTTPStatusError):
+                if n == tries:
+                    raise
+                time.sleep(0.5 * 2 ** n)
+                continue
+            r.raise_for_status()
+            return r.json()
+        raise AssertionError("unreachable")
 
     @staticmethod
     def _image_part(image: bytes, mime: str) -> dict:

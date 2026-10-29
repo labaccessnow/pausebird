@@ -157,3 +157,26 @@ def test_explanation_prompt_uses_the_parent_names(monkeypatch):
     assert 'Call them "아버지"' in seen["prompt"] and "Verdict: SCAM" in seen["prompt"]
     assert "call it 음성 메시지" in seen["prompt"] and "received this voicemail" in seen["prompt"]
     assert seen["effort"] == "minimal"
+
+
+def test_chat_is_plain_http_and_retries_a_503(monkeypatch, tmp_path):
+    import httpx
+
+    from fraudshield.llm import meta
+
+    monkeypatch.setattr(meta, "USAGE_FILE", tmp_path / "usage.json")
+    monkeypatch.setattr(meta.time, "sleep", lambda s: None)
+    sent = []
+
+    def answer(req):
+        sent.append(json.loads(req.content))
+        if len(sent) == 1:
+            return httpx.Response(503)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}}],
+                                         "usage": {"prompt_tokens": 1_000_000, "completion_tokens": 0}})
+
+    b = meta.MetaBrain(api_key="test")
+    b.http = httpx.Client(base_url=meta.BASE_URL, transport=httpx.MockTransport(answer))
+    assert b._chat("hi", effort="minimal") == "ok"
+    assert len(sent) == 2 and sent[1]["reasoning_effort"] == "minimal" and sent[1]["model"] == meta.CHAT_MODEL
+    assert b._spent() == meta.PRICE_IN
