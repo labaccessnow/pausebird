@@ -97,6 +97,7 @@ Settings (environment variables):
 | `FRAUDSHIELD_DEMO` | show the example messages and demo checkbook | `1` |
 | `FRAUDSHIELD_OFFLINE` | no model and no registry lookups | `0` |
 | `FRAUDSHIELD_PASSCODE` | ask for this passcode once per phone (set it when the page is on the internet) | none |
+| `FRAUDSHIELD_ANDROID_CERTS` | more signing-key fingerprints for the Android app (e.g. Google Play's), comma-separated | upload key only |
 
 Installing the page and the Share button need HTTPS, except on `localhost`.
 

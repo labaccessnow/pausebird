@@ -45,7 +45,12 @@ MAX_SIDE = 2000             # screenshots are shrunk to this before the model se
 KEEP = 200                  # verdicts kept in memory for the alert and share buttons
 COOKIE = "ffs_pass"
 LOGIN_TRIES = 10            # wrong passcodes allowed per 10 minutes, across everyone
-OPEN_PATHS = ("/manifest.webmanifest", "/sw.js", "/api/login")  # plus /static/: the shell, no data
+OPEN_PATHS = ("/manifest.webmanifest", "/sw.js", "/api/login",
+              "/.well-known/assetlinks.json")  # plus /static/: the shell, no data
+# The Android app (a Trusted Web Activity) opens full screen only if this site vouches for its signing
+# key. Upload key first; Google Play's app-signing key is added through FRAUDSHIELD_ANDROID_CERTS.
+ANDROID_APP = "com.larkwright.pausebird"
+ANDROID_CERTS = ("BB:F2:C9:5C:33:CA:4D:18:40:28:8E:6D:FF:6F:AF:EA:03:9D:B0:D7:A5:22:1F:9F:4C:2D:EB:27:95:5C:A7:A6",)
 
 mimetypes.add_type("audio/mp4", ".m4a")
 
@@ -200,6 +205,13 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     @app.get("/manifest.webmanifest", include_in_schema=False)
     def manifest():
         return FileResponse(STATIC / "manifest.webmanifest", media_type="application/manifest+json")
+
+    @app.get("/.well-known/assetlinks.json", include_in_schema=False)
+    def assetlinks():
+        certs = list(ANDROID_CERTS) + [c.strip() for c in env("FRAUDSHIELD_ANDROID_CERTS", "").split(",") if c.strip()]
+        return [{"relation": ["delegate_permission/common.handle_all_urls"],
+                 "target": {"namespace": "android_app", "package_name": ANDROID_APP,
+                            "sha256_cert_fingerprints": certs}}]
 
     @app.get("/sw.js", include_in_schema=False)
     def service_worker():

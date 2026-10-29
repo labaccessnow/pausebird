@@ -163,6 +163,8 @@ def test_passcode_locks_everything_but_the_shell():
     c, _ = client(passcode="20261104")
     assert "passcode" in c.get("/").text and c.get("/static/style.css").status_code == 200
     assert "Privacy" in c.get("/static/privacy.html").text  # readable before the passcode
+    link = c.get("/.well-known/assetlinks.json").json()[0]["target"]  # Android must read it without one
+    assert link["package_name"] == "com.larkwright.pausebird" and len(link["sha256_cert_fingerprints"]) >= 1
     assert c.get("/api/status").status_code == 401
     assert c.post("/api/check/message", json={"text": "hi"}).status_code == 401
     shared = c.post("/share", data={"text": "x"}, follow_redirects=False)
