@@ -1,6 +1,6 @@
 """Build the example screenshots: two made-up scam texts drawn like a phone's message screen.
 
-They reuse the made-up senders and links from messages.json (555 numbers, fixture domains),
+They reuse the made-up senders and links from messages.json (555 and 0000 numbers, fixture domains),
 so the page can show a screenshot check without anyone's real messages.
 
     python demo/make_demo_media.py      # needs the Noto Sans CJK font (fonts-noto-cjk)
