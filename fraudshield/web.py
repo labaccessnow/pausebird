@@ -48,9 +48,11 @@ LOGIN_TRIES = 10            # wrong passcodes allowed per 10 minutes, across eve
 OPEN_PATHS = ("/manifest.webmanifest", "/sw.js", "/api/login",
               "/.well-known/assetlinks.json")  # plus /static/: the shell, no data
 # The Android app (a Trusted Web Activity) opens full screen only if this site vouches for its signing
-# key. Upload key first; Google Play's app-signing key is added through FRAUDSHIELD_ANDROID_CERTS.
+# key: the upload key (sideloaded builds), then Google Play's app-signing key (installs from Play).
+# More can be added through FRAUDSHIELD_ANDROID_CERTS.
 ANDROID_APP = "com.larkwright.pausebird"
-ANDROID_CERTS = ("BB:F2:C9:5C:33:CA:4D:18:40:28:8E:6D:FF:6F:AF:EA:03:9D:B0:D7:A5:22:1F:9F:4C:2D:EB:27:95:5C:A7:A6",)
+ANDROID_CERTS = ("BB:F2:C9:5C:33:CA:4D:18:40:28:8E:6D:FF:6F:AF:EA:03:9D:B0:D7:A5:22:1F:9F:4C:2D:EB:27:95:5C:A7:A6",
+                 "D2:A6:6D:CA:A5:37:CC:6E:EA:C1:1F:A7:1D:A7:C8:15:5F:9C:E3:C8:50:D0:9D:17:CE:43:25:CB:36:2D:A3:BB")
 
 mimetypes.add_type("audio/mp4", ".m4a")
 
