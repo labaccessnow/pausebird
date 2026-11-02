@@ -421,6 +421,7 @@ async function fromShare() {
       if (r.kind === "account") showTab("acct");
       current = r;
       render(r);
+      $("#result").scrollIntoView({ behavior: "smooth", block: "start" });  // the answer is below the examples
     } catch (e) {
       showError(e.message);
     }
