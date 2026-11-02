@@ -1,0 +1,63 @@
+{
+  "packageId": "com.larkwright.pausebird",
+  "host": "app.pausebird.com",
+  "name": "Pausebird",
+  "launcherName": "Pausebird",
+  "display": "standalone",
+  "orientation": "portrait",
+  "themeColor": "#1d4ed8",
+  "themeColorDark": "#1d4ed8",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#f4f6fb",
+  "enableNotifications": false,
+  "startUrl": "/",
+  "iconUrl": "https://app.pausebird.com/static/icon-512.png",
+  "maskableIconUrl": "https://app.pausebird.com/static/icon-maskable-512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "<your upload keystore, not in this repo>",
+    "alias": "pausebird"
+  },
+  "appVersionCode": 2,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://app.pausebird.com/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://app.pausebird.com/",
+  "minSdkVersion": 24,
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "shareTarget": {
+    "action": "https://app.pausebird.com/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "media",
+          "accept": [
+            "image/*",
+            "audio/*"
+          ]
+        }
+      ]
+    }
+  },
+  "appVersion": "1.1.0"
+}
