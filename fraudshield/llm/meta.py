@@ -75,7 +75,8 @@ KIND = {"sms": ("text message", "문자"), "kakaotalk": ("KakaoTalk message", "�
 
 
 class MetaBrain:
-    def __init__(self, api_key: Optional[str] = None, budget_usd: Optional[float] = None):
+    def __init__(self, api_key: Optional[str] = None, budget_usd: Optional[float] = None,
+                 usage_file: Optional[Path] = None):
         self.key = api_key or os.environ.get("MODEL_API_KEY")
         if not self.key:
             raise RuntimeError("MODEL_API_KEY is not set")
@@ -84,6 +85,7 @@ class MetaBrain:
         # Plain HTTP, not the OpenAI SDK: Windows Smart App Control blocks the SDK's compiled jiter module.
         self.http = httpx.Client(base_url=BASE_URL, timeout=120, headers={"Authorization": f"Bearer {self.key}"})
         self.budget = budget_usd if budget_usd is not None else float(os.environ.get("FRAUDSHIELD_BUDGET_USD", "140"))
+        self.usage_file = Path(usage_file) if usage_file else USAGE_FILE  # judges get their own count
         # How the explanations address the parent, so the Korean doesn't guess a title.
         self.parent_en = os.environ.get("FRAUDSHIELD_PARENT", "Dad")
         self.parent_ko = os.environ.get("FRAUDSHIELD_PARENT_KO", "아버지")
@@ -92,14 +94,14 @@ class MetaBrain:
     # --- cost guard -----------------------------------------------------
     def _spent(self) -> float:
         try:
-            return json.loads(USAGE_FILE.read_text(encoding="utf-8"))["usd"]
+            return json.loads(self.usage_file.read_text(encoding="utf-8"))["usd"]
         except (OSError, ValueError, KeyError):
             return 0.0
 
     def _add(self, usd: float) -> None:
         with self._lock:
-            USAGE_FILE.parent.mkdir(parents=True, exist_ok=True)
-            USAGE_FILE.write_text(json.dumps({"usd": round(self._spent() + usd, 6)}), encoding="utf-8")
+            self.usage_file.parent.mkdir(parents=True, exist_ok=True)
+            self.usage_file.write_text(json.dumps({"usd": round(self._spent() + usd, 6)}), encoding="utf-8")
 
     def _guard(self) -> None:
         if self._spent() >= self.budget:

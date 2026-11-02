@@ -27,6 +27,7 @@ const T = {
     what_now: "What to do now",
     tell_family: "📣 Tell my family", told_phone: "✓ Your family got an alert.",
     told_console: "✓ Alert written. (Phone alerts aren't set up yet.)",
+    told_demo: "✓ This is where the family's phone gets the alert. (Judge demo: nothing was sent.)",
     told_fail: "The alert did not go through. Please call your family.",
     clicked_btn: "I already clicked, called, or paid", clicked_title: "Do these now",
     why: "Why we think so", read_title: "What we read", from: "From",
@@ -79,6 +80,7 @@ const T = {
     what_now: "지금 할 일",
     tell_family: "📣 가족에게 알리기", told_phone: "✓ 가족에게 알림을 보냈습니다.",
     told_console: "✓ 알림을 작성했습니다. (휴대폰 알림은 아직 설정되지 않았습니다.)",
+    told_demo: "✓ 실제 앱에서는 이때 가족 휴대폰으로 알림이 갑니다. (심사용 데모: 보내지 않았습니다.)",
     told_fail: "알림이 전달되지 않았습니다. 가족에게 직접 전화하세요.",
     clicked_btn: "이미 눌렀거나, 전화했거나, 돈을 보냈어요", clicked_title: "지금 바로 하세요",
     why: "이렇게 판단한 이유", read_title: "읽은 내용", from: "보낸 사람",
@@ -298,7 +300,8 @@ async function tellFamily(r, btn) {
   try {
     const res = await call("/api/alert", { method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id: r.id }) }, true);
-    toldText = !res.sent ? "told_fail" : res.via === "phone" ? "told_phone" : "told_console";
+    toldText = !res.sent ? "told_fail" : res.via === "phone" ? "told_phone"
+      : res.via === "demo" ? "told_demo" : "told_console";
     render(current);
   } catch (e) {
     showError(e.message);

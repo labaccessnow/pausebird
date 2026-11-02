@@ -64,6 +64,24 @@ sheet: share a text or a screenshot straight from Messages or KakaoTalk.
 Safety details: scam links are shown as `hxxps://bad[.]top` so they can't be tapped, phone numbers are
 not turned into links, nothing is saved, and the service worker caches nothing.
 
+## The Android app
+
+[`android/`](android/) is the Pausebird app my dad installed from Google Play testing. It opens the
+same page full screen, and it adds one thing the page can't do: **it watches for scam texts by itself.**
+
+When a new Google Messages or KakaoTalk notification arrives, `ScamWatchService` runs a quick check on
+the phone (`ScamPrefilter`: shortened links, cheap domains and brand look-alikes, Korean 070 numbers,
+pressure words, and "Mom, it's me" messages, in English and Korean). It doesn't decide anything. If the
+message is worth a second look, Pausebird posts a warning in Korean: tap here to check it before you reply.
+One tap opens the normal check with that text already in it.
+
+Nothing is uploaded or saved by the watcher. The message goes to the server only when he taps the
+warning. The watcher has to be turned on by hand in Android's notification-access settings.
+
+The two watcher files and the manifest changes are hand-written. The rest started from
+[Bubblewrap](https://github.com/GoogleChromeLabs/bubblewrap)'s template, so don't run
+`bubblewrap update` on it (see `android/CUSTOM-CODE-README.txt`). The signing keys are not in this repo.
+
 ## Run it
 
 The Python package and settings still use the working name `fraudshield`.
@@ -97,6 +115,8 @@ Settings (environment variables):
 | `FRAUDSHIELD_DEMO` | show the example messages and demo checkbook | `1` |
 | `FRAUDSHIELD_OFFLINE` | no model and no registry lookups | `0` |
 | `FRAUDSHIELD_PASSCODE` | ask for this passcode once per phone (set it when the page is on the internet) | none |
+| `FRAUDSHIELD_JUDGE_PASSCODE` | a second passcode for judges: same page and model, family alerts never sent | none |
+| `FRAUDSHIELD_JUDGE_BUDGET_USD` | the judges' own spending cap, counted apart from the family's | `10` |
 | `FRAUDSHIELD_ANDROID_CERTS` | more signing-key fingerprints for the Android app, comma-separated | upload key + Google Play app-signing key |
 
 Installing the page and the Share button need HTTPS, except on `localhost`.

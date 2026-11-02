@@ -6,6 +6,10 @@ in memory only, so "Tell my family" and the phone's Share button can point at th
 
 Put on the internet with FRAUDSHIELD_PASSCODE set: everything but the page shell then
 needs the passcode once per phone (a long-lived cookie), so strangers can't spend the AI budget.
+
+FRAUDSHIELD_JUDGE_PASSCODE adds a second passcode for hackathon judges. Judges get the same page and
+the same model, but their own small spending cap (FRAUDSHIELD_JUDGE_BUDGET_USD) and family alerts
+that are never sent, so trying the demo can't buzz the real family's phone.
 """
 from __future__ import annotations
 
@@ -19,6 +23,7 @@ import re
 import secrets
 import time
 from collections import OrderedDict
+from contextvars import ContextVar
 from functools import lru_cache
 from pathlib import Path
 from typing import Callable, Optional
@@ -44,6 +49,7 @@ MAX_CSV = 2**20
 MAX_SIDE = 2000             # screenshots are shrunk to this before the model sees them (fewer tokens)
 KEEP = 200                  # verdicts kept in memory for the alert and share buttons
 COOKIE = "ffs_pass"
+JUDGE = ContextVar("judge", default=False)  # True while serving someone who used the judge passcode
 LOGIN_TRIES = 10            # wrong passcodes allowed per 10 minutes, across everyone
 OPEN_PATHS = ("/manifest.webmanifest", "/sw.js", "/api/login",
               "/.well-known/assetlinks.json")  # plus /static/: the shell, no data
@@ -65,6 +71,17 @@ class MessageIn(BaseModel):
 
 class AlertIn(BaseModel):
     id: str = Field(max_length=40)
+
+
+class _ByRole:
+    """Hands each request the family's brain, or the judges' (own spending cap) for a judge."""
+
+    def __init__(self, family, judge):
+        self.family, self.judge = family, judge
+
+    def now(self):
+        """Pick once per request, before any worker threads (they don't see JUDGE)."""
+        return self.judge if JUDGE.get() else self.family
 
 
 class LoginIn(BaseModel):
@@ -146,18 +163,28 @@ def _eyes(fn: Callable, *args):
 def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier] = None,
                rdap: Optional[Callable[[str], Optional[int]]] = None, demo: Optional[bool] = None,
                offline: Optional[bool] = None, parent: Optional[str] = None, lang: Optional[str] = None,
-               passcode: Optional[str] = None) -> FastAPI:
+               passcode: Optional[str] = None, judge_passcode: Optional[str] = None,
+               judge_brain: Optional[Brain] = None) -> FastAPI:
     env = os.environ.get
     offline = offline if offline is not None else env("FRAUDSHIELD_OFFLINE") == "1"
     raw_brain = brain or pick_brain(offline)
     model_on = not isinstance(raw_brain, OfflineBrain)
-    brain = FallbackBrain(raw_brain)
+    family_brain = FallbackBrain(raw_brain)
     demo = demo if demo is not None else env("FRAUDSHIELD_DEMO", "1") == "1"
     parent = parent or env("FRAUDSHIELD_PARENT", "Dad")
     notifier = notifier or (alerts.NtfyNotifier(call=(f"Call {parent}", env("FRAUDSHIELD_PARENT_PHONE", "")))
                             if env("NTFY_TOPIC") else alerts.ConsoleNotifier())
     lang = lang or env("FRAUDSHIELD_LANG", "en")
     passcode = passcode if passcode is not None else env("FRAUDSHIELD_PASSCODE") or None
+    judge_passcode = judge_passcode if judge_passcode is not None else env("FRAUDSHIELD_JUDGE_PASSCODE") or None
+    if not passcode:
+        judge_passcode = None  # a judge passcode only means something on a locked site
+    if judge_passcode and judge_brain is None and brain is None and model_on:
+        from .llm.meta import MetaBrain
+        judge_brain = MetaBrain(budget_usd=float(env("FRAUDSHIELD_JUDGE_BUDGET_USD", "10")),
+                                usage_file=env("FRAUDSHIELD_JUDGE_USAGE")
+                                or Path.home() / ".fraudshield" / "judge-usage.json")
+    brain = _ByRole(family_brain, FallbackBrain(judge_brain) if judge_brain else family_brain)
     demo_data = json.loads((DEMO / "messages.json").read_text(encoding="utf-8")) if demo else {}
 
     if rdap is None:
@@ -180,7 +207,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
         return payload
 
     def judge(msg: Message, what: str, read: Optional[dict] = None) -> dict:
-        v = agent.check_message(msg, brain=brain, rdap=rdap)
+        v = agent.check_message(msg, brain=brain.now(), rdap=rdap)
         return keep({"kind": "message", "level": v.level.name, "score": v.score,
                      "summary": {"en": v.summary_en, "ko": v.summary_ko},
                      "signals": [_signal(s) for s in sorted(v.signals, key=lambda s: -s.weight)],
@@ -194,7 +221,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
 
     app = FastAPI(title="Pausebird", docs_url=None, redoc_url=None, openapi_url=None)
     if passcode:
-        _lock(app, passcode)
+        _lock(app, passcode, judge_passcode)
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     if demo:
         app.mount("/demo-checks", StaticFiles(directory=DEMO / "checks"), name="demo-checks")
@@ -221,8 +248,9 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
 
     @app.get("/api/status")
     def status():
-        return {"model": model_on, "demo": demo, "parent": parent, "lang": lang,
-                "alerts": "phone" if isinstance(notifier, alerts.NtfyNotifier) else "console"}
+        return {"model": model_on, "demo": demo, "parent": parent, "lang": lang, "judge": JUDGE.get(),
+                "alerts": "demo" if JUDGE.get() else
+                          "phone" if isinstance(notifier, alerts.NtfyNotifier) else "console"}
 
     @app.get("/api/demo/messages")
     def demo_messages():
@@ -241,7 +269,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     def check_screenshot(file: UploadFile = File(...)):
         need_model()
         image, mime = _image(_read(file, MAX_IMAGE))
-        msg = _eyes(brain.read_screenshot, image, mime)
+        msg = _eyes(brain.now().read_screenshot, image, mime)
         if not msg or not msg.text.strip():
             raise HTTPException(422, "unreadable")
         return judge(msg, "a screenshot", read={"text": msg.text, "sender": msg.sender})
@@ -250,7 +278,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     def check_voicemail(file: UploadFile = File(...), lang: str = Form(lang)):
         need_model()
         audio, mime = _read(file, MAX_AUDIO), _audio_mime(file)
-        text = _eyes(brain.transcribe, audio, mime, "ko" if lang == "ko" else "en")
+        text = _eyes(brain.now().transcribe, audio, mime, "ko" if lang == "ko" else "en")
         if not text or not text.strip():
             raise HTTPException(422, "unreadable")
         return judge(Message(text=text, channel="voicemail"), "a voicemail", read={"text": text, "sender": None})
@@ -271,7 +299,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
             except ValueError as e:
                 raise HTTPException(400, f"bad_csv: {e}") from None
         if read_images and model_on:
-            cleared = _eyes(agent.read_check_images, cleared, brain)
+            cleared = _eyes(agent.read_check_images, cleared, brain.now())
         v, findings = agent.check_account(cleared, register)
         return keep({"kind": "account", "level": v.level.name, "score": v.score,
                      "summary": {"en": v.summary_en, "ko": v.summary_ko},
@@ -294,6 +322,8 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
         if v.level == Level.SAFE:
             return {"sent": False}
         title, body = alerts.family_alert(parent, v, what)
+        if JUDGE.get():
+            return {"sent": True, "via": "demo"}  # never the real family's phone
         return {"sent": notifier.send(title, body, urgent=v.level == Level.SCAM),
                 "via": "phone" if isinstance(notifier, alerts.NtfyNotifier) else "console"}
 
@@ -320,18 +350,27 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     return app
 
 
-def _lock(app: FastAPI, passcode: str) -> None:
+def _lock(app: FastAPI, passcode: str, judge_passcode: Optional[str] = None) -> None:
     """Ask for the passcode once per phone. The cookie holds an HMAC of the passcode, so
     changing the passcode signs everyone out. Wrong tries are counted for everyone together:
-    simple, and enough to stop guessing (one person can lock it for 10 minutes, at worst)."""
+    simple, and enough to stop guessing (one person can lock it for 10 minutes, at worst).
+    The judge passcode gets its own cookie value, and requests carrying it run as a judge."""
     token = hmac.new(passcode.encode(), b"family-fraud-shield", hashlib.sha256).hexdigest().encode()
+    judge_token = hmac.new(judge_passcode.encode(), b"family-fraud-shield-judge",
+                           hashlib.sha256).hexdigest().encode() if judge_passcode else None
     fails: list[float] = []
 
     @app.middleware("http")
     async def need_passcode(request: Request, call_next):
         path = request.url.path
-        if path.startswith("/static/") or path in OPEN_PATHS or \
-                hmac.compare_digest(request.cookies.get(COOKIE, "").encode(), token):
+        cookie = request.cookies.get(COOKIE, "").encode()
+        if judge_token and hmac.compare_digest(cookie, judge_token):
+            mark = JUDGE.set(True)
+            try:
+                return await call_next(request)
+            finally:
+                JUDGE.reset(mark)
+        if path.startswith("/static/") or path in OPEN_PATHS or hmac.compare_digest(cookie, token):
             return await call_next(request)
         if path == "/":
             return FileResponse(STATIC / "login.html", headers={"Cache-Control": "no-cache"})
@@ -345,10 +384,15 @@ def _lock(app: FastAPI, passcode: str) -> None:
         fails[:] = [t for t in fails if now - t < 600]
         if len(fails) >= LOGIN_TRIES:
             raise HTTPException(429, "slow_down")
-        if not hmac.compare_digest(body.code.strip().encode(), passcode.encode()):
+        code = body.code.strip().encode()
+        if hmac.compare_digest(code, passcode.encode()):
+            value = token
+        elif judge_token and hmac.compare_digest(code, judge_passcode.encode()):
+            value = judge_token
+        else:
             fails.append(now)
             raise HTTPException(403, "wrong_code")
         r = JSONResponse({"ok": True})
         https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
-        r.set_cookie(COOKIE, token.decode(), max_age=400 * 86400, httponly=True, secure=https, samesite="lax")
+        r.set_cookie(COOKIE, value.decode(), max_age=400 * 86400, httponly=True, secure=https, samesite="lax")
         return r

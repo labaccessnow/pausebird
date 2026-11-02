@@ -58,7 +58,7 @@ def test_page_and_status():
     c, _ = client()
     assert "Pausebird" in c.get("/").text
     assert c.get("/manifest.webmanifest").json()["share_target"]["action"] == "/share"
-    assert c.get("/api/status").json() == {"model": False, "demo": True, "parent": "Dad", "lang": "en",
+    assert c.get("/api/status").json() == {"model": False, "demo": True, "parent": "Dad", "lang": "en", "judge": False,
                                            "alerts": "console"}
 
 
@@ -180,6 +180,57 @@ def test_passcode_guessing_is_slowed_down():
     codes = [c.post("/api/login", json={"code": str(n)}).status_code for n in range(11)]
     assert codes[:10] == [403] * 10 and codes[10] == 429
     assert c.post("/api/login", json={"code": "20261104"}).status_code == 429
+
+
+SCAM = "Mom it's me, my phone broke. Buy gift cards and send me the codes now, don't tell Dad"
+
+
+def test_judge_passcode_never_reaches_the_family_phone():
+    c, rec = client(passcode="20261104", judge_passcode="judge-2026")
+    assert c.post("/api/login", json={"code": "judge-2026"}).status_code == 200
+    s = c.get("/api/status").json()
+    assert s["judge"] is True and s["alerts"] == "demo"
+    r = c.post("/api/check/message", json={"text": SCAM}).json()
+    assert r["level"] != "SAFE"  # an alert is offered
+    assert c.post("/api/alert", json={"id": r["id"]}).json() == {"sent": True, "via": "demo"}
+    assert rec.sent == []  # nothing went to the family
+
+    family, rec2 = client(passcode="20261104", judge_passcode="judge-2026")
+    family.post("/api/login", json={"code": "20261104"})
+    assert family.get("/api/status").json()["judge"] is False
+    r = family.post("/api/check/message", json={"text": SCAM}).json()
+    assert family.post("/api/alert", json={"id": r["id"]}).json()["sent"] is True
+    assert len(rec2.sent) == 1
+
+
+def test_judges_use_their_own_brain():
+    rec = Recorder()
+    app = create_app(brain=FakeEyes(text="family brain"), judge_brain=FakeEyes(text="judge brain"),
+                     notifier=rec, offline=True, passcode="20261104", judge_passcode="judge-2026")
+    judge, family = TestClient(app), TestClient(app)
+    judge.post("/api/login", json={"code": "judge-2026"})
+    family.post("/api/login", json={"code": "20261104"})
+    shot = {"file": ("s.png", png(), "image/png")}
+    assert judge.post("/api/check/screenshot", files=shot).json()["read"]["text"] == "judge brain"
+    shot = {"file": ("s.png", png(), "image/png")}
+    assert family.post("/api/check/screenshot", files=shot).json()["read"]["text"] == "family brain"
+
+
+def test_judge_passcode_needs_the_family_passcode():
+    c, _ = client(judge_passcode="judge-2026")  # unlocked site: no judge mode, no login
+    assert c.get("/api/status").json()["judge"] is False
+    assert c.post("/api/login", json={"code": "judge-2026"}).status_code == 404
+
+
+def test_judge_spending_is_counted_separately(tmp_path):
+    from fraudshield.llm.meta import MetaBrain
+    family = MetaBrain(api_key="x", budget_usd=140, usage_file=tmp_path / "usage.json")
+    judge = MetaBrain(api_key="x", budget_usd=0.01, usage_file=tmp_path / "judge-usage.json")
+    judge._add(0.02)
+    with pytest.raises(BudgetExceeded):
+        judge._guard()
+    family._guard()  # the family's budget is untouched
+    assert family._spent() == 0.0
 
 
 
