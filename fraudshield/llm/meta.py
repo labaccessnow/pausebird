@@ -55,7 +55,8 @@ CHECK = _schema("check_image", {
 })
 JUDGE = _schema("scam_judgement", {
     "scam_likelihood": {"type": "integer", "description": "0-100"},
-    "reason": {"type": "string", "description": "One plain sentence."},
+    "reason": {"type": "string", "description": "One plain sentence in English."},
+    "reason_ko": {"type": "string", "description": "The same sentence in simple, polite Korean (존댓말)."},
 })
 EXPLAIN = _schema("plain_explanation", {
     "en": {"type": "string", "description": "The explanation in plain English."},
@@ -162,14 +163,14 @@ class MetaBrain:
                          micr_number=out["micr_number"] if out["micr_number"] >= 0 else None,
                          notes=out["altered_signs"] or None)
 
-    def judge(self, text: str, signals: list[Signal]) -> Optional[tuple[int, str]]:
+    def judge(self, text: str, signals: list[Signal]) -> Optional[tuple[int, str, str]]:
         ev = "\n".join(f"- {s.code}: {s.evidence}" for s in signals) or "- none"
         out = json.loads(self._chat(
             f"A parent received this message:\n---\n{text}\n---\nRule checks found:\n{ev}\n\n"
             "How likely is this a scam? Consider ordinary explanations too (a real friend, a real "
-            "appointment reminder). Answer in English.", JUDGE,
+            "appointment reminder). Give the reason in English, and the same reason in Korean.", JUDGE,
             system="You are a careful fraud analyst protecting older family members."))
-        return round(out["scam_likelihood"] * 0.3), out["reason"]
+        return round(out["scam_likelihood"] * 0.3), out["reason"], out.get("reason_ko") or out["reason"]
 
     def explain(self, msg: Message, signals: list[Signal], level: Level) -> Optional[dict[str, str]]:
         if not signals:

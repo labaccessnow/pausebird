@@ -250,11 +250,14 @@ function render(r) {
   if (lvl !== "SAFE") body.append(actions(r));
 
   if (r.kind === "message" && r.signals.length) {
+    // The model's reason shows once: as a listed reason when it raised the risk, else on its own line.
+    const ai = r.model && (typeof r.model === "string" ? r.model : r.model[lang] || r.model.en);
+    const aiListed = r.signals.some((s) => s.code === "model.judgement");
     body.append(el("details", {},
       el("summary", {}, t("why")),
       el("ul", { class: "why" }, r.signals.map((s) => el("li", { class: s.hard ? "hard" : "" },
         s[lang] || s.en, el("br"), el("span", { class: "evidence" }, s.evidence)))),
-      r.model ? el("p", { class: "meta" }, t("ai") + ": " + r.model) : null,
+      ai && !aiListed ? el("p", { class: "meta" }, t("ai") + ": " + ai) : null,
       el("p", { class: "meta" }, t("score") + ": " + r.score + "/100")));
   }
 

@@ -94,7 +94,8 @@ def main(argv: list[str] | None = None) -> int:
         if a.log:
             a.log.parent.mkdir(parents=True, exist_ok=True)
             sys.stdout = sys.stderr = open(a.log, "a", encoding="utf-8", buffering=1)
-        uvicorn.run(create_app(brain=pick_brain(a.offline), offline=a.offline), host=a.host, port=a.port)
+        # No brain passed in: create_app picks it, and only then also builds the judges' own (capped) one.
+        uvicorn.run(create_app(offline=a.offline), host=a.host, port=a.port)
         return 0
     b = pick_brain(a.offline)
 

@@ -39,6 +39,7 @@ class Verdict(BaseModel):
     summary_ko: str
     next_steps: list[str] = []
     model_opinion: Optional[str] = None  # what the LLM added, kept separate from rule evidence
+    model_opinion_ko: Optional[str] = None  # the same, in Korean
 
 
 class CheckItem(BaseModel):

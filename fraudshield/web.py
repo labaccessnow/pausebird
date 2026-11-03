@@ -50,7 +50,21 @@ MAX_SIDE = 2000             # screenshots are shrunk to this before the model se
 KEEP = 200                  # verdicts kept in memory for the alert and share buttons
 COOKIE = "ffs_pass"
 JUDGE = ContextVar("judge", default=False)  # True while serving someone who used the judge passcode
-LOGIN_TRIES = 10            # wrong passcodes allowed per 10 minutes, across everyone
+LOGIN_TRIES = 10            # wrong passcodes allowed per 10 minutes from one visitor
+LOGIN_TRIES_ALL = 100       # ...and from everyone together, a backstop against many-address guessing
+# Sent with every answer. The page loads nothing from elsewhere except Cloudflare's visit counter,
+# which Cloudflare adds to the page itself (it reports back to /cdn-cgi/rum on this site).
+SECURITY_HEADERS = {
+    "Content-Security-Policy": "default-src 'self'; script-src 'self' https://static.cloudflareinsights.com; "
+                               "style-src 'self'; img-src 'self' blob: data:; "
+                               "connect-src 'self' https://cloudflareinsights.com; "
+                               "object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+}
+HSTS = "max-age=15552000"   # 180 days; this host only (no includeSubDomains, no preload yet)
 OPEN_PATHS = ("/manifest.webmanifest", "/sw.js", "/api/login",
               "/.well-known/assetlinks.json")  # plus /static/: the shell, no data
 # The Android app (a Trusted Web Activity) opens full screen only if this site vouches for its signing
@@ -213,7 +227,9 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
                      "signals": [_signal(s) for s in sorted(v.signals, key=lambda s: -s.weight)],
                      "steps": _steps("message" if v.level != Level.SAFE else None),
                      "clicked_steps": _steps("clicked"),
-                     "model": v.model_opinion, "read": read}, v, what)
+                     "model": {"en": v.model_opinion, "ko": v.model_opinion_ko or v.model_opinion}
+                              if v.model_opinion else None,
+                     "read": read}, v, what)
 
     def need_model() -> None:
         if not model_on:
@@ -222,6 +238,7 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     app = FastAPI(title="Pausebird", docs_url=None, redoc_url=None, openapi_url=None)
     if passcode:
         _lock(app, passcode, judge_passcode)
+    _harden(app)  # added last = runs first, so even the locked answers get the headers
     app.mount("/static", StaticFiles(directory=STATIC), name="static")
     if demo:
         app.mount("/demo-checks", StaticFiles(directory=DEMO / "checks"), name="demo-checks")
@@ -350,15 +367,47 @@ def create_app(brain: Optional[Brain] = None, notifier: Optional[alerts.Notifier
     return app
 
 
+def _visitor_scheme(request: Request) -> Optional[str]:
+    """'http' or 'https' as the visitor used it, when Cloudflare says so; None when reached
+    directly (the home network's copy, or tests)."""
+    try:
+        return json.loads(request.headers.get("cf-visitor", "")).get("scheme")
+    except (ValueError, AttributeError):
+        return None
+
+
+def _visitor(request: Request) -> str:
+    """Who is knocking: Cloudflare's view of the visitor's address, else the direct caller."""
+    return request.headers.get("cf-connecting-ip") or (request.client.host if request.client else "?")
+
+
+def _harden(app: FastAPI) -> None:
+    """Send plain-http visitors to https, and add the browser security headers to every answer."""
+
+    @app.middleware("http")
+    async def secure(request: Request, call_next):
+        scheme = _visitor_scheme(request)
+        if scheme == "http":
+            # 308 keeps the method and body, so a POST is repeated over https rather than lost.
+            r = RedirectResponse(str(request.url.replace(scheme="https", port=None)), status_code=308)
+        else:
+            r = await call_next(request)
+        for k, v in SECURITY_HEADERS.items():
+            r.headers.setdefault(k, v)
+        if scheme == "https":
+            r.headers.setdefault("Strict-Transport-Security", HSTS)
+        return r
+
+
 def _lock(app: FastAPI, passcode: str, judge_passcode: Optional[str] = None) -> None:
     """Ask for the passcode once per phone. The cookie holds an HMAC of the passcode, so
-    changing the passcode signs everyone out. Wrong tries are counted for everyone together:
-    simple, and enough to stop guessing (one person can lock it for 10 minutes, at worst).
+    changing the passcode signs everyone out. Wrong tries are counted per visitor, so one
+    stranger can't lock everyone else out, plus a much higher cap for everyone together.
     The judge passcode gets its own cookie value, and requests carrying it run as a judge."""
     token = hmac.new(passcode.encode(), b"family-fraud-shield", hashlib.sha256).hexdigest().encode()
     judge_token = hmac.new(judge_passcode.encode(), b"family-fraud-shield-judge",
                            hashlib.sha256).hexdigest().encode() if judge_passcode else None
-    fails: list[float] = []
+    fails: dict[str, list[float]] = {}
 
     @app.middleware("http")
     async def need_passcode(request: Request, call_next):
@@ -381,8 +430,12 @@ def _lock(app: FastAPI, passcode: str, judge_passcode: Optional[str] = None) -> 
     @app.post("/api/login")
     def login(body: LoginIn, request: Request):
         now = time.monotonic()
-        fails[:] = [t for t in fails if now - t < 600]
-        if len(fails) >= LOGIN_TRIES:
+        for k in list(fails):
+            fails[k] = [t for t in fails[k] if now - t < 600]
+            if not fails[k]:
+                del fails[k]
+        who = _visitor(request)
+        if len(fails.get(who, ())) >= LOGIN_TRIES or sum(map(len, fails.values())) >= LOGIN_TRIES_ALL:
             raise HTTPException(429, "slow_down")
         code = body.code.strip().encode()
         if hmac.compare_digest(code, passcode.encode()):
@@ -390,9 +443,9 @@ def _lock(app: FastAPI, passcode: str, judge_passcode: Optional[str] = None) -> 
         elif judge_token and hmac.compare_digest(code, judge_passcode.encode()):
             value = judge_token
         else:
-            fails.append(now)
+            fails.setdefault(who, []).append(now)
             raise HTTPException(403, "wrong_code")
         r = JSONResponse({"ok": True})
-        https = request.headers.get("x-forwarded-proto", request.url.scheme) == "https"
+        https = (_visitor_scheme(request) or request.headers.get("x-forwarded-proto", request.url.scheme)) == "https"
         r.set_cookie(COOKIE, value.decode(), max_age=400 * 86400, httponly=True, secure=https, samesite="lax")
         return r

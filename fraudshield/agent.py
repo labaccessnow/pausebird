@@ -77,13 +77,16 @@ def check_message(msg: Message, brain: Optional[Brain] = None, online: bool = Fa
         rdap = links.rdap_age_days
     sig = message_signals(msg, rdap if online or rdap else None)
 
-    opinion = brain.judge(msg.text, sig)
+    opinion = brain.judge(msg.text, sig)  # (weight, reason in English[, reason in Korean])
+    why = why_ko = None
     if opinion:
-        weight, why = opinion
+        weight, why = opinion[0], opinion[1]
+        why_ko = (opinion[2] if len(opinion) > 2 else None) or why
         weight = max(0, min(MODEL_MAX_WEIGHT, weight))
         if weight:
-            sig.append(Signal(code="model.judgement", weight=weight, evidence=why[:200],
-                              detail_en=why, detail_ko=why))
+            # The evidence names the source: the reason itself is already the signal's text.
+            sig.append(Signal(code="model.judgement", weight=weight, evidence="Muse Spark",
+                              detail_en=why, detail_ko=why_ko))
 
     score = min(100, sum(s.weight for s in sig))
     level = _level(score, sig)
@@ -92,7 +95,7 @@ def check_message(msg: Message, brain: Optional[Brain] = None, online: bool = Fa
     return Verdict(level=level, score=score, signals=sig,
                    summary_en=plain.get("en") or en, summary_ko=plain.get("ko") or ko,
                    next_steps=playbooks.steps("message") if level != Level.SAFE else [],
-                   model_opinion=opinion[1] if opinion else None)
+                   model_opinion=why, model_opinion_ko=why_ko)
 
 
 def read_check_images(cleared: list[CheckItem], brain: Brain) -> list[CheckItem]:

@@ -182,6 +182,64 @@ def test_passcode_guessing_is_slowed_down():
     assert c.post("/api/login", json={"code": "20261104"}).status_code == 429
 
 
+def test_one_guesser_cant_lock_out_everyone():
+    c, _ = client(passcode="20261104")
+    stranger, judge = {"cf-connecting-ip": "203.0.113.9"}, {"cf-connecting-ip": "198.51.100.7"}
+    codes = [c.post("/api/login", json={"code": str(n)}, headers=stranger).status_code for n in range(11)]
+    assert codes[:10] == [403] * 10 and codes[10] == 429  # the guesser is slowed down...
+    assert c.post("/api/login", json={"code": "20261104"}, headers=judge).status_code == 200  # ...nobody else
+
+
+def test_many_guessers_still_hit_the_shared_cap():
+    from fraudshield import web
+    c, _ = client(passcode="20261104")
+    for n in range(web.LOGIN_TRIES_ALL):
+        c.post("/api/login", json={"code": "x"}, headers={"cf-connecting-ip": f"10.0.{n // 250}.{n % 250}"})
+    assert c.post("/api/login", json={"code": "20261104"},
+                  headers={"cf-connecting-ip": "192.0.2.1"}).status_code == 429
+
+
+def test_plain_http_visitors_are_sent_to_https():
+    c, _ = client(passcode="20261104")
+    r = c.get("/static/privacy.html?x=1", headers={"cf-visitor": '{"scheme":"http"}'}, follow_redirects=False)
+    assert r.status_code == 308 and r.headers["location"] == "https://testserver/static/privacy.html?x=1"
+    r = c.post("/api/login", json={"code": "20261104"}, headers={"cf-visitor": '{"scheme":"http"}'},
+               follow_redirects=False)
+    assert r.status_code == 308 and "set-cookie" not in r.headers  # the passcode is never accepted over http
+    r = c.get("/", headers={"cf-visitor": '{"scheme":"https"}'})
+    assert r.status_code == 200 and r.headers["strict-transport-security"].startswith("max-age=")
+    assert "strict-transport-security" not in c.get("/").headers  # home-network copy: no Cloudflare, no HSTS
+
+
+def test_security_headers_on_every_answer():
+    c, _ = client(passcode="20261104")
+    for r in (c.get("/"), c.get("/static/app.js"), c.get("/api/status"), c.get("/no-such-page")):
+        assert "frame-ancestors 'none'" in r.headers["content-security-policy"]
+        assert r.headers["x-content-type-options"] == "nosniff" and r.headers["x-frame-options"] == "DENY"
+        assert r.headers["referrer-policy"] == "no-referrer" and "camera=()" in r.headers["permissions-policy"]
+
+
+class KoreanJudge(FakeEyes):
+    def __init__(self, weight):
+        super().__init__()
+        self.weight = weight
+
+    def judge(self, text, signals):
+        return self.weight, "Real banks never ask for gift cards.", "진짜 은행은 상품권을 요구하지 않습니다."
+
+
+def test_model_reason_comes_in_korean_and_shows_once():
+    c, _ = client(KoreanJudge(25))
+    r = c.post("/api/check/message", json={"text": "Bank alert: pay the fee in gift cards today"}).json()
+    ai = [s for s in r["signals"] if s["code"] == "model.judgement"]
+    assert ai and ai[0]["ko"] == "진짜 은행은 상품권을 요구하지 않습니다." and ai[0]["en"].startswith("Real banks")
+    assert ai[0]["evidence"] == "Muse Spark"  # the source, not the same sentence again
+    assert r["model"] == {"en": "Real banks never ask for gift cards.", "ko": "진짜 은행은 상품권을 요구하지 않습니다."}
+
+    r = client(KoreanJudge(0))[0].post("/api/check/message", json={"text": "See you Sunday"}).json()
+    assert r["model"]["ko"].startswith("진짜") and not any(s["code"] == "model.judgement" for s in r["signals"])
+
+
 SCAM = "Mom it's me, my phone broke. Buy gift cards and send me the codes now, don't tell Dad"
 
 
@@ -275,3 +333,24 @@ def test_failed_push_is_reported_to_the_page():
     r = c.post("/api/check/message", json={"text": "Chase Alert: account suspended. Verify: "
                "http://chase-secure-login.com.verify-acct.xyz/login"}).json()
     assert c.post("/api/alert", json={"id": r["id"]}).json()["sent"] is False
+
+
+def test_server_gives_judges_their_own_budget(monkeypatch, tmp_path):
+    """`fraudshield serve` must let create_app build the judges' capped brain (it once passed its own)."""
+    import uvicorn
+    from fraudshield import cli
+    from fraudshield.llm import meta
+    made = []
+
+    class Recorded(meta.MetaBrain):
+        def __init__(self, **kw):
+            made.append(kw)
+
+    monkeypatch.setattr(meta, "MetaBrain", Recorded)
+    monkeypatch.setattr(uvicorn, "run", lambda app, **kw: None)
+    for k, v in {"MODEL_API_KEY": "x", "FRAUDSHIELD_PASSCODE": "20261104",
+                 "FRAUDSHIELD_JUDGE_PASSCODE": "123456789012",
+                 "FRAUDSHIELD_JUDGE_USAGE": str(tmp_path / "judge.json")}.items():
+        monkeypatch.setenv(k, v)
+    cli.main(["serve"])
+    assert {} in made and {"budget_usd": 10.0, "usage_file": str(tmp_path / "judge.json")} in made
